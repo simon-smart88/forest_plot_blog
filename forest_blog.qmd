@@ -1,0 +1,186 @@
+---
+title: "Scaling complex base plots in Shiny"
+format: 
+  html:
+    code-fold: true
+    code-summary: "View code chunk"
+    page-layout: full
+  
+---
+
+## Introduction
+
+I've been working with various base plots in Shiny recently that have been creating difficulties with achieving the desired behaviour in various aspects of scaling. In short, I want plots to display with legible text, without whitespace around them, without cutting off areas of the plots and to respond to screen size. The plotting functions are all from established packages for conducting meta-analyses, so I don't have any option of using alternatives, both because they are very good at what they do, but also because their code is well-validated. I couldn't find a solution elsewhere, so thought it would be sensible to share my solution.
+
+Here is a screenshot of the existing app to demonstrate the problem: 
+
+```{=html}
+<img src="blog_images/current.png" width = "100%"/>
+```
+
+Whilst the plots are visible they are very small and if you decrease the size of the window, they will eventually start to get cut off. Users can upload datasets of various sizes and consequently, both the width and the height need to adjust depending on the data which means calculating a width and height for the plot.
+
+## An interactive example
+
+This plot is different to that shown above, but created with the same function (`meta::forest()`) and demonstrates the same difficulties, just using example datasets. In this example, you can see various problems:
+
+-  Make the width too narrow and the edges of the plot disappear
+-  With the default plot height, there is a lot of whitespace
+-  However you change the width and height of the plot, you can never make the text larger
+-  Switch to the `woodyplants` dataset (a very appropriate name!) and you'll never be able to fit the whole plot on the page
+
+```{r eval = FALSE, echo = TRUE}
+library(shiny)
+library(bslib)
+library(meta)
+
+ui <- page_sidebar(
+  theme = bs_theme(version = 5, "darkly"),
+
+  sidebar = sidebar(
+    selectInput("dataset", "Dataset", choices =  c("Olkin1995", "woodyplants")),
+    sliderInput("width", "Plot width (pixels)", min = 100, max = 1000, value = 800),
+    sliderInput("height", "Plot height (pixels)", min = 400, max = 1000, value = 800)
+  ),
+  plotOutput("plot")
+)
+
+server <- function(input, output) {
+
+  output$plot <- renderPlot({
+    data(woodyplants)
+    data(Olkin1995)
+
+    if (input$dataset == "Olkin1995"){
+      m <- metabin(ev.exp, n.exp, ev.cont, n.cont,
+                    data = Olkin1995, subset = c(41, 47, 51, 59),
+                    sm = "RR", method = "I",
+                    studlab = paste(author, year))
+    }
+
+    if (input$dataset == "woodyplants"){
+      m <- metacont(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,
+                     data = woodyplants, sm = "ROM")}
+
+      meta::forest(m)
+    }, width = \() input$width, height = \() input$height)
+
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+
+```{=html}
+<iframe src="https://shinylive.io/r/app/#h=0&code=NobwRAdghgtgpmAXGKAHVA6ASmANGAYwHsIAXOMpMAGwEsAjAJykYE8AKAZwAtaJWAlAB0IdJiw71OY4aIbM27eKSiyRAV1oACADwBaLaigBzOAH1OtACZx6LdiK1bS3OPC0BeLVLMu3cdgA3OEZLEk8tAFZcLSEwKxYAa2pWOIFcEUctSxs7Rgic23ssp044ajgCUgBJCFR1Ugd4qBUy0jiYuIARFqg2jq0CbiJaAjhOCMGmgHlqRL4ARgBOJciBuIB3IiIrVlRqKDJONPSS7LobRlr6xs3rF3WwAAVqIlItDfvuLXZUWgAPcqcYR4LQwPgRBYABihMRgUH+kJhsK0gSg1HUcAiAA4YacIE5ShcQtcGk1XLRjNx2qC4i83loKVT3r8AUCQXCIV4ACwwuEIpF81HozE4vFZfFOfZvaYNG5NaU02RqCBlRjBfL6LQAM3UECqtBI7D4NxiRDlDQEWhAmQJWnNpBuABJFboDIwKJd6Y0bXanAkVOwtjs9gcjrJCVoA1B2LN5hBlqsVZHaNqfiaGk7o21PF44nHFis1mABL7I04YG6wXAVPQ+Ow4IEMHB-qgYhBm62Yo2MMQyO3eyRSBk-eWx2PoxECwmizFOOopDWIgR2NyFjFuQB2GKRddRJaS8dHyOcSt5sBYLADZTDKwROLVDpnY-jzikdRWA70CJGN8BKANMMjAxKwcAsAIEaEgAvraKZpsadSZtmS4eOewa7PshykMcJZluWlZasoUB9o0HblI2cJgWRFSBHOVjNjRA6wPQlGHBgzF0exMAsc+L4Tr0EToaGWGcHOZ6xBe0wALJpDBEC8URiCINqRAem+SiQU4UExJ8VguPeQjsFaGakE6ukuDETLUgZRlaCZTpWaQKpySIPB8KwACC6DsJoESaHOIQagUgUhLIYBQQAukAA" width = "100%" height = "1000px"></iframe>
+```
+
+## SVG to the rescue
+
+In one part of the existing app, this was already causing a problem where three plots were being displayed side-by-side and even on a wide screen, the plot did not fit in the column. As a workaround, the plot was being rendered to a png file and then read back in to display. This fixed the problem of the edges being cut off, but there was actually a lot of white space around the plot which made it especially small. This workaround got me thinking though and I thought it would be much better if instead of rendering the plot to a png, it was rendered to an svg (scalable vector graphic), which, if inside an appropriate container can always scale to fit inside. SVGs are a great format and use code to produce graphics in an analagous way to how html can be used to produce text.
+
+### svglite
+
+Ideally, I was looking for a function that generates svg code, rather than writing to a file like `svg()` does to avoid writing and reading unneccessarily. After some searching I came across `svglite::xmlSVG()` which does exactly what I wanted. `svglite::stringSVG()` is very similar, but as we'll see later on, getting the output as an `{xml2}` object rather than a character has advantages when it comes to editing. The svg code output is shown below, followed by the resultant plot. The `paste(svg, collapse = "\n")` here and elsewhere is needed to convert the `{xml2}` object to a string.
+
+```{r echo = TRUE}
+svg <- svglite::xmlSVG({
+  plot(1:5, 1:5)
+}, standalone = TRUE)
+
+cat(paste(svg, collapse = "\n"))
+```
+
+```{r results = 'asis'}
+htmltools::HTML(paste(svg, collapse = "\n"))
+```
+
+In practice, we still need to calculate sensible values for width and height, but at least now we only have to do that once when we generate the plot and can rescale it however we like afterwards.
+
+One problem I encountered with this is that the fonts are not automatically embedded in the svg, and so we need to add another argument to ensure that the text displays the same for all users. I haven't been able to find a method to know what font the plot uses though, so I have to generate it first, inspect the code and then go back and add the required font.
+
+### Cropping
+
+This largely solved the problem in the app, but I'm also producing an html report and some of the plots had a lot of whitespace below them leading to gaps between the outputs in the report. I knew that I could crop SVGs by adjusting their `viewBox` parameter, which acts like a window into the canvas, but figuring out where the content would be from the code was difficult, if not impossible. Seemingly, the only way to do this is to render the svg to pixels via `paste(svg, collapse = "\n") |> magick::image_read_svg() |> magick::image_data()` and then search for the outermost pixels that aren't white. I was worried this would be slow, but it ended up only taking ~0.1 seconds which seems reasonable enough.
+
+The values for the `viewBox` are a little odd, as you specify the starting x and y coordinates followed by the width and height. I also wanted to add a margin around the content, so needed to add or substract that from the outermost pixel coordinates.
+
+```{r echo = TRUE, eval = FALSE}
+pixel_data <- paste(svg, collapse = "\n") |>
+  magick::image_read_svg() |>
+  magick::image_data()
+
+# Create a matrix of pixels containing content
+is_content <- !(
+  # white (all RGB channels > 250)
+  (pixel_data[1,,] > 250 &
+     pixel_data[2,,] > 250 &
+     pixel_data[3,,] > 250)
+)
+
+content_pixels <- which(is_content, arr.ind = TRUE)
+
+x_coords <- content_pixels[, 1]
+y_coords <- content_pixels[, 2]
+
+x_min <- min(x_coords)
+x_max <- max(x_coords)
+y_min <- min(y_coords)
+y_max <- max(y_coords)
+
+width <- x_max - x_min
+height <- y_max - y_min
+
+bbox <- list(
+  x = x_min - margin,
+  y = y_min - margin,
+  width = width + (margin * 2),
+  height = height + (margin * 2)
+)
+
+# update viewBox
+svg_node <- xml2::xml_find_first(svg, "//svg")
+xml2::xml_attr(svg_node, "viewBox") <- paste(bbox$x, bbox$y, bbox$width, bbox$height)
+
+```
+
+Further annoyance came when I went to download the plots as pngs rendered from the svg and found that some of the background was transparent. I'm not sure why this happens as the background was already set as `<rect width = "100%" height = "100%" fill = "white"/>` but after some fiddling, I found I could get the desired result by hard-coding the width and height in pixels instead and this is where having the output as xml came in handy:
+
+```{r echo = TRUE, eval = FALSE}
+total_width <- gsub("pt", "", xml2::xml_attr(svg_node, "width"))
+total_height <- gsub("pt", "", xml2::xml_attr(svg_node, "height"))
+rect_node <- xml2::xml_find_first(svg, "//rect[@width='100%']")
+xml2::xml_attr(rect_node, "width") <- total_width
+xml2::xml_attr(rect_node, "height") <- total_height
+```
+
+The width and height of the `viewBox` are also returned by the cropping function which enables rendering the plot to other file formats.
+
+### Containerisation
+
+The next step was to make a container div to put the plots in to, enabling the plots to scale dynamically. We need two css rules - one for the container and another for the inside it svg. These are basically saying, take up as much width as possible and adjust the height accordingly i.e. maintaining the aspect ratio. Adding a `max-height: 90vh` might also be sensible, to ensure that very tall plots will always be entirely visible.
+
+```css
+.svg_container {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: hidden;
+}
+
+.svg_container svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+```
+
+## Side effects
+
+There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, the svg can be rendered to other file formats (pdf and png) and produce *exactly* the same plot as the user sees on the screen. Whilst the rendering from `pdf()` `png()` and `svg()` is pretty similar, there are small differences in text rendering which to a pedant like myself was annoying. Unlike before, we can also call the plotting function once in a `reactive()` and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.
+
+The downsides compared to before are that the plots aren't easily edited inside R and to be displayed in Rstudio, they need wrapping in `htmltools::HTML()`. Both of these would relatively easy to resolve though by adding a parameter to the function determine what type of output it produced - either the svg code, the svg wrapped in `htmltools::HTML()` or writing to the graphics device.
+
+## End result
+
+Here's the same interactive example after giving it the treatment.

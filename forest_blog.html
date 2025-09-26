@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.24">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Scaling complex base plots in Shiny</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="forest_blog_files/libs/clipboard/clipboard.min.js"></script>
+<script src="forest_blog_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="forest_blog_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="forest_blog_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="forest_blog_files/libs/quarto-html/popper.min.js"></script>
+<script src="forest_blog_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="forest_blog_files/libs/quarto-html/anchor.min.js"></script>
+<link href="forest_blog_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="forest_blog_files/libs/quarto-html/quarto-syntax-highlighting-dc55a5b9e770e841cd82e46aadbfb9b0.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="forest_blog_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="forest_blog_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="forest_blog_files/libs/bootstrap/bootstrap-9d8a390dd97085bbea74f0d24a3d8b8c.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-full">
+
+<main class="content column-page" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Scaling complex base plots in Shiny</h1>
+</div>
+
+
+
+<div class="quarto-title-meta column-page">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>I’ve been working with various base plots in Shiny recently that have been creating difficulties with achieving the desired behaviour in various aspects of scaling. In short, I want plots to display with legible text, without loads of whitespace around them, without cutting off areas of the plots and to respond to screen size. The plotting functions are all from established packages for conducting meta-analyses, so I don’t have any option of using alternatives, both because they are very good at what they do, but also because their code is well-validated. I couldn’t find a solution elsewhere, so thought it would be sensible to share my solution</p>
+<p>Here is a screenshot of the existing app which demonstrates the problem:</p>
+<img src="blog_images/current.png" width="100%">
+<p>Whilst the plots are visible they are very small and if you decrease the size of the window, they will eventually start to get cut off. Users can upload datasets of various sizes and consequently, both the width and the height need to adjust depending on the data which means calculating a width and height for the plot.</p>
+</section>
+<section id="an-interactive-example" class="level2">
+<h2 class="anchored" data-anchor-id="an-interactive-example">An interactive example</h2>
+<p>This plot is different to that shown above, but actually created with the same function (<code>meta::forest()</code>) and has the same problems. In this example, you can see various problems:</p>
+<ul>
+<li>Make the width too narrow and the edges of the plot disappear</li>
+<li>With the default plot height, there is a lot of whitespace</li>
+<li>However you change the width and height of the plot, you can never make the text larger</li>
+<li>Switch to the <code>woodyplants</code> dataset (a very appropriate name!) and you’ll never be able to fit the whole plot on the page</li>
+</ul>
+<div class="cell">
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(shiny)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(bslib)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(meta)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>ui <span class="ot">&lt;-</span> <span class="fu">page_sidebar</span>(</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">theme =</span> <span class="fu">bs_theme</span>(<span class="at">version =</span> <span class="dv">5</span>, <span class="st">"darkly"</span>),</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">sidebar =</span> <span class="fu">sidebar</span>(</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">selectInput</span>(<span class="st">"dataset"</span>, <span class="st">"Dataset"</span>, <span class="at">choices =</span>  <span class="fu">c</span>(<span class="st">"Olkin1995"</span>, <span class="st">"woodyplants"</span>)),</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">sliderInput</span>(<span class="st">"width"</span>, <span class="st">"Plot width (pixels)"</span>, <span class="at">min =</span> <span class="dv">100</span>, <span class="at">max =</span> <span class="dv">1000</span>, <span class="at">value =</span> <span class="dv">800</span>),</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">sliderInput</span>(<span class="st">"height"</span>, <span class="st">"Plot height (pixels)"</span>, <span class="at">min =</span> <span class="dv">400</span>, <span class="at">max =</span> <span class="dv">1000</span>, <span class="at">value =</span> <span class="dv">800</span>)</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plotOutput</span>(<span class="st">"plot"</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>server <span class="ot">&lt;-</span> <span class="cf">function</span>(input, output) {</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>  output<span class="sc">$</span>plot <span class="ot">&lt;-</span> <span class="fu">renderPlot</span>({</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">data</span>(woodyplants)</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">data</span>(Olkin1995)</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (input<span class="sc">$</span>dataset <span class="sc">==</span> <span class="st">"Olkin1995"</span>){</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>      m <span class="ot">&lt;-</span> <span class="fu">metabin</span>(ev.exp, n.exp, ev.cont, n.cont,</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>                    <span class="at">data =</span> Olkin1995, <span class="at">subset =</span> <span class="fu">c</span>(<span class="dv">41</span>, <span class="dv">47</span>, <span class="dv">51</span>, <span class="dv">59</span>),</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>                    <span class="at">sm =</span> <span class="st">"RR"</span>, <span class="at">method =</span> <span class="st">"I"</span>,</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>                    <span class="at">studlab =</span> <span class="fu">paste</span>(author, year))</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (input<span class="sc">$</span>dataset <span class="sc">==</span> <span class="st">"woodyplants"</span>){</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>      m <span class="ot">&lt;-</span> <span class="fu">metacont</span>(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>                     <span class="at">data =</span> woodyplants, <span class="at">sm =</span> <span class="st">"ROM"</span>)}</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>      meta<span class="sc">::</span><span class="fu">forest</span>(m)</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    }, <span class="at">width =</span> \() input<span class="sc">$</span>width, <span class="at">height =</span> \() input<span class="sc">$</span>height)</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a><span class="fu">shinyApp</span>(<span class="at">ui =</span> ui, <span class="at">server =</span> server)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<iframe src="https://shinylive.io/r/app/#h=0&amp;code=NobwRAdghgtgpmAXGKAHVA6ASmANGAYwHsIAXOMpMAGwEsAjAJykYE8AKAZwAtaJWAlAB0IdJiw71OY4aIbM27eKSiyRAV1oACADwBaLaigBzOAH1OtACZx6LdiK1bS3OPC0BeLVLMu3cdgA3OEZLEk8tAFZcLSEwKxYAa2pWOIFcEUctSxs7Rgic23ssp044ajgCUgBJCFR1Ugd4qBUy0jiYuIARFqg2jq0CbiJaAjhOCMGmgHlqRL4ARgBOJciBuIB3IiIrVlRqKDJONPSS7LobRlr6xs3rF3WwAAVqIlItDfvuLXZUWgAPcqcYR4LQwPgRBYABihMRgUH+kJhsK0gSg1HUcAiAA4YacIE5ShcQtcGk1XLRjNx2qC4i83loKVT3r8AUCQXCIV4ACwwuEIpF81HozE4vFZfFOfZvaYNG5NaU02RqCBlRjBfL6LQAM3UECqtBI7D4NxiRDlDQEWhAmQJWnNpBuABJFboDIwKJd6Y0bXanAkVOwtjs9gcjrJCVoA1B2LN5hBlqsVZHaNqfiaGk7o21PF44nHFis1mABL7I04YG6wXAVPQ+Ow4IEMHB-qgYhBm62Yo2MMQyO3eyRSBk-eWx2PoxECwmizFOOopDWIgR2NyFjFuQB2GKRddRJaS8dHyOcSt5sBYLADZTDKwROLVDpnY-jzikdRWA70CJGN8BKANMMjAxKwcAsAIEaEgAvraKZpsadSZtmS4eOewa7PshykMcJZluWlZasoUB9o0HblI2cJgWRFSBHOVjNjRA6wPQlGHBgzF0exMAsc+L4Tr0EToaGWGcHOZ6xBe0wALJpDBEC8URiCINqRAem+SiQU4UExJ8VguPeQjsFaGakE6ukuDETLUgZRlaCZTpWaQKpySIPB8KwACC6DsJoESaHOIQagUgUhLIYBQQAukAA" width="100%" height="1000px"></iframe>
+</section>
+<section id="svg-to-the-rescue" class="level2">
+<h2 class="anchored" data-anchor-id="svg-to-the-rescue">SVG to the rescue</h2>
+<p>In one part of the existing app, this was already causing a problem where three plots were being displayed side-by-side and even on a wide screen, the plot did not fit in the column. As a workaround, the plot was being rendered to a png file and then read back in to display. This fixed the problem of the edges being cut off, but there was actually a lot of white space around the plot which made it especially small. This workaround got me thinking though and I thought it would be much better if instead of rendering the plot to a png, it was rendered to an svg (scalable vector graphic), which, if inside an appropriate container can always scale to fit inside. SVGs are a great format and use code to produce graphics in an analagous way to how html can be used to produce text.</p>
+<section id="svglite" class="level3">
+<h3 class="anchored" data-anchor-id="svglite">svglite</h3>
+<p>Ideally, I was looking for a function that generated svg code, rather than writing to a file like <code>svg()</code>. After some searching I came across <code>svglite::xmlSVG()</code> which does exactly what I wanted. <code>svglite::stringSVG()</code> is very similar, but as we’ll see later on, getting the output as <code>xml</code> rather than a character has advantages when it comes to editing.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>svg <span class="ot">&lt;-</span> svglite<span class="sc">::</span><span class="fu">xmlSVG</span>({</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>}, <span class="at">standalone =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="504.00pt" height="504.00pt" viewBox="0 0 504.00 504.00"&gt;
+  &lt;g class="svglite"&gt;
+    &lt;defs&gt;
+      &lt;style type="text/css"&gt;&lt;![CDATA[
+    .svglite line, .svglite polyline, .svglite polygon, .svglite path, .svglite rect, .svglite circle {
+      fill: none;
+      stroke: #000000;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-miterlimit: 10.00;
+    }
+    .svglite text {
+      white-space: pre;
+    }
+    .svglite g.glyphgroup path {
+      fill: inherit;
+      stroke: none;
+    }
+  ]]&gt;&lt;/style&gt;
+    &lt;/defs&gt;
+    &lt;rect width="100%" height="100%" style="stroke: none; fill: #FFFFFF;"/&gt;
+    &lt;defs&gt;
+      &lt;clipPath id="cpMC4wMHw1MDQuMDB8MC4wMHw1MDQuMDA="&gt;
+        &lt;rect x="0.00" y="0.00" width="504.00" height="504.00"/&gt;
+      &lt;/clipPath&gt;
+    &lt;/defs&gt;
+    &lt;g clip-path="url(#cpMC4wMHw1MDQuMDB8MC4wMHw1MDQuMDA=)"&gt;
+&lt;/g&gt;
+    &lt;defs&gt;
+      &lt;clipPath id="cpNTkuMDR8NDczLjc2fDU5LjA0fDQzMC41Ng=="&gt;
+        &lt;rect x="59.04" y="59.04" width="414.72" height="371.52"/&gt;
+      &lt;/clipPath&gt;
+    &lt;/defs&gt;
+    &lt;g clip-path="url(#cpNTkuMDR8NDczLjc2fDU5LjA0fDQzMC41Ng==)"&gt;
+      &lt;circle cx="74.40" cy="416.80" r="2.70" style="stroke-width: 0.75;"/&gt;
+      &lt;circle cx="170.40" cy="330.80" r="2.70" style="stroke-width: 0.75;"/&gt;
+      &lt;circle cx="266.40" cy="244.80" r="2.70" style="stroke-width: 0.75;"/&gt;
+      &lt;circle cx="362.40" cy="158.80" r="2.70" style="stroke-width: 0.75;"/&gt;
+      &lt;circle cx="458.40" cy="72.80" r="2.70" style="stroke-width: 0.75;"/&gt;
+    &lt;/g&gt;
+    &lt;g clip-path="url(#cpMC4wMHw1MDQuMDB8MC4wMHw1MDQuMDA=)"&gt;
+      &lt;line x1="74.40" y1="430.56" x2="458.40" y2="430.56" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="74.40" y1="430.56" x2="74.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="170.40" y1="430.56" x2="170.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="266.40" y1="430.56" x2="266.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="362.40" y1="430.56" x2="362.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="458.40" y1="430.56" x2="458.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
+      &lt;text x="74.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;1&lt;/text&gt;
+      &lt;text x="170.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;2&lt;/text&gt;
+      &lt;text x="266.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;3&lt;/text&gt;
+      &lt;text x="362.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;4&lt;/text&gt;
+      &lt;text x="458.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;5&lt;/text&gt;
+      &lt;line x1="59.04" y1="416.80" x2="59.04" y2="72.80" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="59.04" y1="416.80" x2="51.84" y2="416.80" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="59.04" y1="330.80" x2="51.84" y2="330.80" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="59.04" y1="244.80" x2="51.84" y2="244.80" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="59.04" y1="158.80" x2="51.84" y2="158.80" style="stroke-width: 0.75;"/&gt;
+      &lt;line x1="59.04" y1="72.80" x2="51.84" y2="72.80" style="stroke-width: 0.75;"/&gt;
+      &lt;text transform="translate(41.76,416.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;1&lt;/text&gt;
+      &lt;text transform="translate(41.76,330.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;2&lt;/text&gt;
+      &lt;text transform="translate(41.76,244.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;3&lt;/text&gt;
+      &lt;text transform="translate(41.76,158.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;4&lt;/text&gt;
+      &lt;text transform="translate(41.76,72.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;5&lt;/text&gt;
+      &lt;polygon points="59.04,430.56 473.76,430.56 473.76,59.04 59.04,59.04 " style="stroke-width: 0.75;"/&gt;
+      &lt;text x="266.40" y="485.28" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="16.67px" lengthAdjust="spacingAndGlyphs"&gt;1:5&lt;/text&gt;
+      &lt;text transform="translate(12.96,244.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="16.67px" lengthAdjust="spacingAndGlyphs"&gt;1:5&lt;/text&gt;
+    &lt;/g&gt;
+  &lt;/g&gt;
+&lt;/svg&gt;</code></pre>
+</div>
+</div>
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>htmltools<span class="sc">::</span><span class="fu">HTML</span>(<span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<!--?xml version="1.0" encoding="UTF-8"?-->
+<svg xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" width="504.00pt" height="504.00pt" viewbox="0 0 504.00 504.00">
+  <g class="svglite">
+    <defs>
+      <style type="text/css">
+    .svglite line, .svglite polyline, .svglite polygon, .svglite path, .svglite rect, .svglite circle {
+      fill: none;
+      stroke: #000000;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-miterlimit: 10.00;
+    }
+    .svglite text {
+      white-space: pre;
+    }
+    .svglite g.glyphgroup path {
+      fill: inherit;
+      stroke: none;
+    }
+  </style>
+    </defs>
+    <rect width="100%" height="100%" style="stroke: none; fill: #FFFFFF;"></rect>
+    <defs>
+      <clippath id="cpMC4wMHw1MDQuMDB8MC4wMHw1MDQuMDA=">
+        <rect x="0.00" y="0.00" width="504.00" height="504.00"></rect>
+      </clippath>
+    </defs>
+    <g clip-path="url(#cpMC4wMHw1MDQuMDB8MC4wMHw1MDQuMDA=)">
+</g>
+    <defs>
+      <clippath id="cpNTkuMDR8NDczLjc2fDU5LjA0fDQzMC41Ng==">
+        <rect x="59.04" y="59.04" width="414.72" height="371.52"></rect>
+      </clippath>
+    </defs>
+    <g clip-path="url(#cpNTkuMDR8NDczLjc2fDU5LjA0fDQzMC41Ng==)">
+      <circle cx="74.40" cy="416.80" r="2.70" style="stroke-width: 0.75;"></circle>
+      <circle cx="170.40" cy="330.80" r="2.70" style="stroke-width: 0.75;"></circle>
+      <circle cx="266.40" cy="244.80" r="2.70" style="stroke-width: 0.75;"></circle>
+      <circle cx="362.40" cy="158.80" r="2.70" style="stroke-width: 0.75;"></circle>
+      <circle cx="458.40" cy="72.80" r="2.70" style="stroke-width: 0.75;"></circle>
+    </g>
+    <g clip-path="url(#cpMC4wMHw1MDQuMDB8MC4wMHw1MDQuMDA=)">
+      <line x1="74.40" y1="430.56" x2="458.40" y2="430.56" style="stroke-width: 0.75;"></line>
+      <line x1="74.40" y1="430.56" x2="74.40" y2="437.76" style="stroke-width: 0.75;"></line>
+      <line x1="170.40" y1="430.56" x2="170.40" y2="437.76" style="stroke-width: 0.75;"></line>
+      <line x1="266.40" y1="430.56" x2="266.40" y2="437.76" style="stroke-width: 0.75;"></line>
+      <line x1="362.40" y1="430.56" x2="362.40" y2="437.76" style="stroke-width: 0.75;"></line>
+      <line x1="458.40" y1="430.56" x2="458.40" y2="437.76" style="stroke-width: 0.75;"></line>
+      <text x="74.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">1</text>
+      <text x="170.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">2</text>
+      <text x="266.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">3</text>
+      <text x="362.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">4</text>
+      <text x="458.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">5</text>
+      <line x1="59.04" y1="416.80" x2="59.04" y2="72.80" style="stroke-width: 0.75;"></line>
+      <line x1="59.04" y1="416.80" x2="51.84" y2="416.80" style="stroke-width: 0.75;"></line>
+      <line x1="59.04" y1="330.80" x2="51.84" y2="330.80" style="stroke-width: 0.75;"></line>
+      <line x1="59.04" y1="244.80" x2="51.84" y2="244.80" style="stroke-width: 0.75;"></line>
+      <line x1="59.04" y1="158.80" x2="51.84" y2="158.80" style="stroke-width: 0.75;"></line>
+      <line x1="59.04" y1="72.80" x2="51.84" y2="72.80" style="stroke-width: 0.75;"></line>
+      <text transform="translate(41.76,416.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">1</text>
+      <text transform="translate(41.76,330.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">2</text>
+      <text transform="translate(41.76,244.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">3</text>
+      <text transform="translate(41.76,158.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">4</text>
+      <text transform="translate(41.76,72.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">5</text>
+      <polygon points="59.04,430.56 473.76,430.56 473.76,59.04 59.04,59.04 " style="stroke-width: 0.75;"></polygon>
+      <text x="266.40" y="485.28" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="16.67px" lengthadjust="spacingAndGlyphs">1:5</text>
+      <text transform="translate(12.96,244.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="16.67px" lengthadjust="spacingAndGlyphs">1:5</text>
+    </g>
+  </g>
+</svg>
+
+<p>One problem I encountered with this is that the fonts are not automatically embedded in the svg, and so we need to add another argument to ensure that the text displays the same for all users. I haven’t been able to find a method to know what font the plot uses though, so I have to generate it first, inspect the code and then go back and add the required font.</p>
+</section>
+<section id="cropping" class="level3">
+<h3 class="anchored" data-anchor-id="cropping">Cropping</h3>
+<p>This largely solved the problem in the app, but I’m also producing an html report and annoyingly, some of the plots had a lot of whitespace below them leading to gaps between the outputs in the report. I knew that I could crop SVGs by adjusting their <code>viewBox</code> parameter, which acts like a window into the canvas, but figuring out where the content would be the code was problematic. Seemingly, the only way to do this is to render the svg to pixels via <code>paste(svg, collapse = "\n") |&gt; magick::image_read_svg() |&gt; magick::image_data()</code> and then search for the outermost pixels that weren’t white. I was worried this would be slow, but it ended up only taking ~0.1 seconds which seems reasonable.</p>
+<p>Further annoyance came when I went to download the plots as pngs rendered from the svg and found that some of the background was transparent. I’m not sure why this happened as the background was set as <code>&lt;rect width = "100%" height = "100%" fill = "white"/&gt;</code> but after some fiddling, I found I could get the desired result by hard-coding the width and height in pixels instead and this is where having the output as xml came in handy:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>svg_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(input_svg, <span class="st">"//svg"</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>total_width <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"width"</span>))</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>total_height <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"height"</span>))</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>rect_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(input_svg, <span class="st">"//rect[@width='100%']"</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"width"</span>) <span class="ot">&lt;-</span> total_width</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"height"</span>) <span class="ot">&lt;-</span> total_height</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="containerisation" class="level3">
+<h3 class="anchored" data-anchor-id="containerisation">Containerisation</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode css code-with-copy"><code class="sourceCode css"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> {</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="kw">overflow</span><span class="ch">:</span> <span class="dv">hidden</span><span class="op">;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> svg {</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The next step was to make a container div to put the plots in to. This is what enables scaling the plot dynamically. We need two css rules - one for the container and another for the inside it svg.</p>
+</section>
+</section>
+<section id="side-effects" class="level2">
+<h2 class="anchored" data-anchor-id="side-effects">Side effects</h2>
+<p>There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, the svg can be rendered to other file formats (pdf and png) and produce <em>exactly</em> the same plot as the user sees on the screen. Whilst the rendering from <code>pdf()</code> <code>png()</code> and <code>svg()</code> is pretty similar, there are small differences in text rendering which to a pedant like me was annoying. Unlike before, we can also call the plotting function once in a <code>reactive()</code> and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.</p>
+<p>The downsides compared to before are that the plots aren’t easily edited inside R and to be displayed in Rstudio, they need wrapping in <code>htmltools::HTML()</code>. Both of these would relatively easy to resolve though by adding a parameter to the function determine what type of output it produced - either the svg code, the svg wrapped in <code>htmltools::HTML()</code> or writing to the graphics device.</p>
+</section>
+<section id="end-result" class="level2">
+<h2 class="anchored" data-anchor-id="end-result">End result</h2>
+<p>Here’s the same interactive example after giving it the treatment.</p>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
