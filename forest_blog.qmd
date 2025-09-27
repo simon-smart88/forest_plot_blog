@@ -213,7 +213,7 @@ Here's the same interactive example after giving it the treatment. Now the plot 
 ```
 
 ```{=html}
-<iframe src="https://019985f8-8345-84ad-d084-8114e92ba959.share.connect.posit.cloud" width = "100%" height = "1000px"></iframe>
+<iframe data-external="1" src="https://019985f8-8345-84ad-d084-8114e92ba959.share.connect.posit.cloud" width = "100%" height = "1000px"></iframe>
 ```
 
 
