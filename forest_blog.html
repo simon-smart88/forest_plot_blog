@@ -101,14 +101,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <section id="introduction" class="level2">
 <h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
-<p>I’ve been working with various base plots in Shiny recently that have been creating difficulties with achieving the desired behaviour in various aspects of scaling. In short, I want plots to display with legible text, without loads of whitespace around them, without cutting off areas of the plots and to respond to screen size. The plotting functions are all from established packages for conducting meta-analyses, so I don’t have any option of using alternatives, both because they are very good at what they do, but also because their code is well-validated. I couldn’t find a solution elsewhere, so thought it would be sensible to share my solution</p>
-<p>Here is a screenshot of the existing app which demonstrates the problem:</p>
-<img src="blog_images/current.png" width="100%">
+<p>I’ve been working with various base plots in Shiny recently that have been creating difficulties with achieving the desired behaviour in various aspects of scaling. In short, I want plots to display with legible text, without whitespace around them, without cutting off areas of the plots and to respond to screen size. The plotting functions are all from established packages for conducting meta-analyses, so I don’t have any option of using alternatives, both because they are very good at what they do, but also because their code is well-validated. I couldn’t find a solution elsewhere, so thought it would be sensible to share my solution.</p>
+<p>Here is a screenshot of the <a href="https://crsu.shinyapps.io/MetaInsight/">existing app</a> to demonstrate the problem:</p>
+<img src="current.png" width="100%">
 <p>Whilst the plots are visible they are very small and if you decrease the size of the window, they will eventually start to get cut off. Users can upload datasets of various sizes and consequently, both the width and the height need to adjust depending on the data which means calculating a width and height for the plot.</p>
 </section>
 <section id="an-interactive-example" class="level2">
 <h2 class="anchored" data-anchor-id="an-interactive-example">An interactive example</h2>
-<p>This plot is different to that shown above, but actually created with the same function (<code>meta::forest()</code>) and has the same problems. In this example, you can see various problems:</p>
+<p>This plot is different to that shown above, but created with the same function (<code>meta::forest()</code>) and demonstrates the same difficulties, just using example datasets. In this example, you can see various problems:</p>
 <ul>
 <li>Make the width too narrow and the edges of the plot disappear</li>
 <li>With the default plot height, there is a lot of whitespace</li>
@@ -162,10 +162,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="svg-to-the-rescue" class="level2">
 <h2 class="anchored" data-anchor-id="svg-to-the-rescue">SVG to the rescue</h2>
-<p>In one part of the existing app, this was already causing a problem where three plots were being displayed side-by-side and even on a wide screen, the plot did not fit in the column. As a workaround, the plot was being rendered to a png file and then read back in to display. This fixed the problem of the edges being cut off, but there was actually a lot of white space around the plot which made it especially small. This workaround got me thinking though and I thought it would be much better if instead of rendering the plot to a png, it was rendered to an svg (scalable vector graphic), which, if inside an appropriate container can always scale to fit inside. SVGs are a great format and use code to produce graphics in an analagous way to how html can be used to produce text.</p>
+<p>In one part of the existing app, this was already causing a problem where three plots were being displayed side-by-side and even on a wide screen, the plot did not fit inside the column. As a workaround, the plot was being rendered to a png file and then read back in to display. This fixed the problem of the edges being cut off, but there was white space around the plot which made it especially small. This workaround got me thinking though and I thought it would be much better if instead of rendering the plot to a png, it was rendered to an svg (scalable vector graphic), which, if inside an appropriate container can always be scaled to fit inside. SVGs are a great format and use code to produce graphics in an analagous way to how html can be used to produce text.</p>
 <section id="svglite" class="level3">
 <h3 class="anchored" data-anchor-id="svglite">svglite</h3>
-<p>Ideally, I was looking for a function that generated svg code, rather than writing to a file like <code>svg()</code>. After some searching I came across <code>svglite::xmlSVG()</code> which does exactly what I wanted. <code>svglite::stringSVG()</code> is very similar, but as we’ll see later on, getting the output as <code>xml</code> rather than a character has advantages when it comes to editing.</p>
+<p>Ideally, I was looking for a function that generates svg code, rather than writing to a file like <code>svg()</code> does to avoid writing and reading to file unnecessarily. After some searching I came across <code>svglite::xmlSVG()</code> which does exactly what I wanted. <code>svglite::stringSVG()</code> is very similar, but as we’ll see later on, getting the output as an <code>{xml2}</code> object rather than a character has advantages when it comes to editing. The svg code output of a very minimal plot is shown below, followed by the resultant plot. The <code>paste(svg, collapse = "\n")</code> here and elsewhere is needed to convert the <code>{xml2}</code> object to a string.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>View code chunk</summary>
@@ -324,48 +324,117 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </svg>
 
 <p>One problem I encountered with this is that the fonts are not automatically embedded in the svg, and so we need to add another argument to ensure that the text displays the same for all users. I haven’t been able to find a method to know what font the plot uses though, so I have to generate it first, inspect the code and then go back and add the required font.</p>
-</section>
-<section id="cropping" class="level3">
-<h3 class="anchored" data-anchor-id="cropping">Cropping</h3>
-<p>This largely solved the problem in the app, but I’m also producing an html report and annoyingly, some of the plots had a lot of whitespace below them leading to gaps between the outputs in the report. I knew that I could crop SVGs by adjusting their <code>viewBox</code> parameter, which acts like a window into the canvas, but figuring out where the content would be the code was problematic. Seemingly, the only way to do this is to render the svg to pixels via <code>paste(svg, collapse = "\n") |&gt; magick::image_read_svg() |&gt; magick::image_data()</code> and then search for the outermost pixels that weren’t white. I was worried this would be slow, but it ended up only taking ~0.1 seconds which seems reasonable.</p>
-<p>Further annoyance came when I went to download the plots as pngs rendered from the svg and found that some of the background was transparent. I’m not sure why this happened as the background was set as <code>&lt;rect width = "100%" height = "100%" fill = "white"/&gt;</code> but after some fiddling, I found I could get the desired result by hard-coding the width and height in pixels instead and this is where having the output as xml came in handy:</p>
 <div class="cell">
 <details class="code-fold">
 <summary>View code chunk</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>svg_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(input_svg, <span class="st">"//svg"</span>)</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>total_width <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"width"</span>))</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>total_height <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"height"</span>))</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>rect_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(input_svg, <span class="st">"//rect[@width='100%']"</span>)</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"width"</span>) <span class="ot">&lt;-</span> total_width</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"height"</span>) <span class="ot">&lt;-</span> total_height</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>svg <span class="ot">&lt;-</span> svglite<span class="sc">::</span><span class="fu">xmlSVG</span>({</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>}, <span class="at">standalone =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a> <span class="at">web_fonts =</span> <span class="fu">list</span>(<span class="st">"https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&amp;display=swap"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>We also need to calculate sensible values for width and height, but at least now we only have to do that once when we generate the plot and can rescale it however we like afterwards.</p>
+</section>
+<section id="cropping" class="level3">
+<h3 class="anchored" data-anchor-id="cropping">Cropping</h3>
+<p>This largely solved the problem in the app, but I’m also producing an html report and some of the plots had a lot of whitespace below them leading to gaps between the outputs in the report. I knew that I could crop SVGs by adjusting their <code>viewBox</code> parameter, which acts like a window into the canvas, but figuring out where the content would be from the code was difficult, if not impossible. Seemingly, the only way to do this is to render the svg to pixels, for example via <code>paste(svg, collapse = "\n") |&gt; magick::image_read_svg() |&gt; magick::image_data()</code>, and then search for the outermost pixels that aren’t white. I was worried this would be slow, but it ended up only taking ~0.1 seconds which seems reasonable enough.</p>
+<p>The values for the <code>viewBox</code> are a little odd, as you specify the starting x and y coordinates followed by the width and height. I also wanted to add a margin around the content, so needed to add or substract that from the outermost pixel coordinates.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>pixel_data <span class="ot">&lt;-</span> <span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  magick<span class="sc">::</span><span class="fu">image_read_svg</span>() <span class="sc">|&gt;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  magick<span class="sc">::</span><span class="fu">image_data</span>()</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a matrix of pixels containing content</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>is_content <span class="ot">&lt;-</span> <span class="sc">!</span>(</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="co"># white (all RGB channels &gt; 250)</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  (pixel_data[<span class="dv">1</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span> <span class="sc">&amp;</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>     pixel_data[<span class="dv">2</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span> <span class="sc">&amp;</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>     pixel_data[<span class="dv">3</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span>)</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>content_pixels <span class="ot">&lt;-</span> <span class="fu">which</span>(is_content, <span class="at">arr.ind =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>x_coords <span class="ot">&lt;-</span> content_pixels[, <span class="dv">1</span>]</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>y_coords <span class="ot">&lt;-</span> content_pixels[, <span class="dv">2</span>]</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>x_min <span class="ot">&lt;-</span> <span class="fu">min</span>(x_coords)</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>x_max <span class="ot">&lt;-</span> <span class="fu">max</span>(x_coords)</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>y_min <span class="ot">&lt;-</span> <span class="fu">min</span>(y_coords)</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>y_max <span class="ot">&lt;-</span> <span class="fu">max</span>(y_coords)</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>width <span class="ot">&lt;-</span> x_max <span class="sc">-</span> x_min</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>height <span class="ot">&lt;-</span> y_max <span class="sc">-</span> y_min</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>bbox <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">x =</span> x_min <span class="sc">-</span> margin,</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">y =</span> y_min <span class="sc">-</span> margin,</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>  <span class="at">width =</span> width <span class="sc">+</span> (margin <span class="sc">*</span> <span class="dv">2</span>),</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>  <span class="at">height =</span> height <span class="sc">+</span> (margin <span class="sc">*</span> <span class="dv">2</span>)</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a><span class="co"># update viewBox</span></span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>svg_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(svg, <span class="st">"//svg:svg"</span>, <span class="at">ns =</span> <span class="fu">c</span>(<span class="at">svg =</span> <span class="st">"http://www.w3.org/2000/svg"</span>))</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"viewBox"</span>) <span class="ot">&lt;-</span> <span class="fu">paste</span>(bbox<span class="sc">$</span>x, bbox<span class="sc">$</span>y, bbox<span class="sc">$</span>width, bbox<span class="sc">$</span>height)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>Further annoyance came when I went to download the plots as pngs rendered from the svg and found that some of the background was transparent. I’m not sure why this happens as the background was already set as <code>&lt;rect width = "100%" height = "100%" fill = "white"/&gt;</code> but after some fiddling, I found I could get the desired result by hard-coding the width and height in pixels instead and this is where having the output as xml came in handy:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>total_width <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"width"</span>))</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>total_height <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"height"</span>))</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>rect_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(svg, <span class="st">"//svg:rect[@width='100%']"</span>, <span class="at">ns =</span> <span class="fu">c</span>(<span class="at">svg =</span> <span class="st">"http://www.w3.org/2000/svg"</span>))</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"width"</span>) <span class="ot">&lt;-</span> total_width</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"height"</span>) <span class="ot">&lt;-</span> total_height</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>The width and height of the <code>viewBox</code> are also returned by the cropping function which enables rendering the plot to other file formats using <code>{rsvg}</code>.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>write_svg_plot <span class="ot">&lt;-</span> <span class="cf">function</span>(file, type, svg) {</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"pdf"</span>) {</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    rsvg<span class="sc">::</span><span class="fu">rsvg_pdf</span>(<span class="fu">charToRaw</span>(svg<span class="sc">$</span>svg), file, svg<span class="sc">$</span>width, svg<span class="sc">$</span>height)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"png"</span>) {</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    rsvg<span class="sc">::</span><span class="fu">rsvg_png</span>(<span class="fu">charToRaw</span>(svg<span class="sc">$</span>svg), file, svg<span class="sc">$</span>width <span class="sc">*</span> <span class="dv">3</span>, svg<span class="sc">$</span>height <span class="sc">*</span> <span class="dv">3</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"svg"</span>) {</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">writeLines</span>(svg<span class="sc">$</span>svg, file)</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 </section>
 <section id="containerisation" class="level3">
 <h3 class="anchored" data-anchor-id="containerisation">Containerisation</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode css code-with-copy"><code class="sourceCode css"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> {</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="kw">overflow</span><span class="ch">:</span> <span class="dv">hidden</span><span class="op">;</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> svg {</span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The next step was to make a container div to put the plots in to. This is what enables scaling the plot dynamically. We need two css rules - one for the container and another for the inside it svg.</p>
+<p>The next step was to make a container div to put the plots in to, enabling the plots to scale dynamically. We need two css rules - one for the container and another for the inside it svg. These are basically saying, take up as much width as possible and adjust the height accordingly i.e.&nbsp;maintaining the aspect ratio. Adding a <code>max-height: 90vh</code> might also be sensible, to ensure that very tall plots will always be entirely visible.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode css code-with-copy"><code class="sourceCode css"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> {</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="kw">overflow</span><span class="ch">:</span> <span class="dv">hidden</span><span class="op">;</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> svg {</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="side-effects" class="level2">
 <h2 class="anchored" data-anchor-id="side-effects">Side effects</h2>
-<p>There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, the svg can be rendered to other file formats (pdf and png) and produce <em>exactly</em> the same plot as the user sees on the screen. Whilst the rendering from <code>pdf()</code> <code>png()</code> and <code>svg()</code> is pretty similar, there are small differences in text rendering which to a pedant like me was annoying. Unlike before, we can also call the plotting function once in a <code>reactive()</code> and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.</p>
-<p>The downsides compared to before are that the plots aren’t easily edited inside R and to be displayed in Rstudio, they need wrapping in <code>htmltools::HTML()</code>. Both of these would relatively easy to resolve though by adding a parameter to the function determine what type of output it produced - either the svg code, the svg wrapped in <code>htmltools::HTML()</code> or writing to the graphics device.</p>
+<p>There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, the svg can be rendered to other file formats (pdf and png) and produce <em>exactly</em> the same plot as the user sees on the screen. Whilst the rendering from <code>pdf()</code> <code>png()</code> and <code>svg()</code> is pretty similar, there are small differences in text rendering which to a pedant like myself was annoying. Unlike before, we can also call the plotting function once in a <code>reactive()</code> and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.</p>
+<p>The downsides compared to before are that the plots aren’t easily edited inside R and to be displayed in Rstudio, they need wrapping in <code>htmltools::HTML()</code>. Both of these would relatively easy to resolve though by adding a parameter to determine what type of output the functions produce - either the svg code, the svg wrapped in <code>htmltools::HTML()</code> or writing to the graphics device.</p>
 </section>
 <section id="end-result" class="level2">
 <h2 class="anchored" data-anchor-id="end-result">End result</h2>
-<p>Here’s the same interactive example after giving it the treatment.</p>
+<p>Here’s the same interactive example after giving it the treatment. Now the plot can scale whatever the size of the container.</p>
+<iframe src="https://019985f8-8345-84ad-d084-8114e92ba959.share.connect.posit.cloud" width="100%" height="1000px"></iframe>
+<p>You can also see it in action in <a href="https://crsu.shinyapps.io/MetaInsight_Scholar/">the dev version</a> of the app.</p>
 </section>
 
 </main>

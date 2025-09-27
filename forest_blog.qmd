@@ -12,10 +12,10 @@ format:
 
 I've been working with various base plots in Shiny recently that have been creating difficulties with achieving the desired behaviour in various aspects of scaling. In short, I want plots to display with legible text, without whitespace around them, without cutting off areas of the plots and to respond to screen size. The plotting functions are all from established packages for conducting meta-analyses, so I don't have any option of using alternatives, both because they are very good at what they do, but also because their code is well-validated. I couldn't find a solution elsewhere, so thought it would be sensible to share my solution.
 
-Here is a screenshot of the existing app to demonstrate the problem: 
+Here is a screenshot of the [existing app](https://crsu.shinyapps.io/MetaInsight/) to demonstrate the problem: 
 
 ```{=html}
-<img src="blog_images/current.png" width = "100%"/>
+<img src="current.png" width = "100%"/>
 ```
 
 Whilst the plots are visible they are very small and if you decrease the size of the window, they will eventually start to get cut off. Users can upload datasets of various sizes and consequently, both the width and the height need to adjust depending on the data which means calculating a width and height for the plot.
@@ -77,11 +77,11 @@ shinyApp(ui = ui, server = server)
 
 ## SVG to the rescue
 
-In one part of the existing app, this was already causing a problem where three plots were being displayed side-by-side and even on a wide screen, the plot did not fit in the column. As a workaround, the plot was being rendered to a png file and then read back in to display. This fixed the problem of the edges being cut off, but there was actually a lot of white space around the plot which made it especially small. This workaround got me thinking though and I thought it would be much better if instead of rendering the plot to a png, it was rendered to an svg (scalable vector graphic), which, if inside an appropriate container can always scale to fit inside. SVGs are a great format and use code to produce graphics in an analagous way to how html can be used to produce text.
+In one part of the existing app, this was already causing a problem where three plots were being displayed side-by-side and even on a wide screen, the plot did not fit inside the column. As a workaround, the plot was being rendered to a png file and then read back in to display. This fixed the problem of the edges being cut off, but there was white space around the plot which made it especially small. This workaround got me thinking though and I thought it would be much better if instead of rendering the plot to a png, it was rendered to an svg (scalable vector graphic), which, if inside an appropriate container can always be scaled to fit inside. SVGs are a great format and use code to produce graphics in an analagous way to how html can be used to produce text.
 
 ### svglite
 
-Ideally, I was looking for a function that generates svg code, rather than writing to a file like `svg()` does to avoid writing and reading unneccessarily. After some searching I came across `svglite::xmlSVG()` which does exactly what I wanted. `svglite::stringSVG()` is very similar, but as we'll see later on, getting the output as an `{xml2}` object rather than a character has advantages when it comes to editing. The svg code output is shown below, followed by the resultant plot. The `paste(svg, collapse = "\n")` here and elsewhere is needed to convert the `{xml2}` object to a string.
+Ideally, I was looking for a function that generates svg code, rather than writing to a file like `svg()` does to avoid writing and reading to file unnecessarily. After some searching I came across `svglite::xmlSVG()` which does exactly what I wanted. `svglite::stringSVG()` is very similar, but as we'll see later on, getting the output as an `{xml2}` object rather than a character has advantages when it comes to editing. The svg code output of a very minimal plot is shown below, followed by the resultant plot. The `paste(svg, collapse = "\n")` here and elsewhere is needed to convert the `{xml2}` object to a string.
 
 ```{r echo = TRUE}
 svg <- svglite::xmlSVG({
@@ -95,13 +95,20 @@ cat(paste(svg, collapse = "\n"))
 htmltools::HTML(paste(svg, collapse = "\n"))
 ```
 
-In practice, we still need to calculate sensible values for width and height, but at least now we only have to do that once when we generate the plot and can rescale it however we like afterwards.
-
 One problem I encountered with this is that the fonts are not automatically embedded in the svg, and so we need to add another argument to ensure that the text displays the same for all users. I haven't been able to find a method to know what font the plot uses though, so I have to generate it first, inspect the code and then go back and add the required font.
+
+```{r echo = TRUE}
+svg <- svglite::xmlSVG({
+  plot(1:5, 1:5)
+}, standalone = TRUE,
+ web_fonts = list("https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&display=swap"))
+```
+
+We also need to calculate sensible values for width and height, but at least now we only have to do that once when we generate the plot and can rescale it however we like afterwards.
 
 ### Cropping
 
-This largely solved the problem in the app, but I'm also producing an html report and some of the plots had a lot of whitespace below them leading to gaps between the outputs in the report. I knew that I could crop SVGs by adjusting their `viewBox` parameter, which acts like a window into the canvas, but figuring out where the content would be from the code was difficult, if not impossible. Seemingly, the only way to do this is to render the svg to pixels via `paste(svg, collapse = "\n") |> magick::image_read_svg() |> magick::image_data()` and then search for the outermost pixels that aren't white. I was worried this would be slow, but it ended up only taking ~0.1 seconds which seems reasonable enough.
+This largely solved the problem in the app, but I'm also producing an html report and some of the plots had a lot of whitespace below them leading to gaps between the outputs in the report. I knew that I could crop SVGs by adjusting their `viewBox` parameter, which acts like a window into the canvas, but figuring out where the content would be from the code was difficult, if not impossible. Seemingly, the only way to do this is to render the svg to pixels, for example via `paste(svg, collapse = "\n") |> magick::image_read_svg() |> magick::image_data()`, and then search for the outermost pixels that aren't white. I was worried this would be slow, but it ended up only taking ~0.1 seconds which seems reasonable enough.
 
 The values for the `viewBox` are a little odd, as you specify the starting x and y coordinates followed by the width and height. I also wanted to add a margin around the content, so needed to add or substract that from the outermost pixel coordinates.
 
@@ -139,7 +146,7 @@ bbox <- list(
 )
 
 # update viewBox
-svg_node <- xml2::xml_find_first(svg, "//svg")
+svg_node <- xml2::xml_find_first(svg, "//svg:svg", ns = c(svg = "http://www.w3.org/2000/svg"))
 xml2::xml_attr(svg_node, "viewBox") <- paste(bbox$x, bbox$y, bbox$width, bbox$height)
 
 ```
@@ -149,12 +156,27 @@ Further annoyance came when I went to download the plots as pngs rendered from t
 ```{r echo = TRUE, eval = FALSE}
 total_width <- gsub("pt", "", xml2::xml_attr(svg_node, "width"))
 total_height <- gsub("pt", "", xml2::xml_attr(svg_node, "height"))
-rect_node <- xml2::xml_find_first(svg, "//rect[@width='100%']")
+rect_node <- xml2::xml_find_first(svg, "//svg:rect[@width='100%']", ns = c(svg = "http://www.w3.org/2000/svg"))
 xml2::xml_attr(rect_node, "width") <- total_width
 xml2::xml_attr(rect_node, "height") <- total_height
 ```
 
-The width and height of the `viewBox` are also returned by the cropping function which enables rendering the plot to other file formats.
+The width and height of the `viewBox` are also returned by the cropping function which enables rendering the plot to other file formats using `{rsvg}`.
+
+```{r echo = TRUE, eval = FALSE}
+write_svg_plot <- function(file, type, svg) {
+  if (type == "pdf") {
+    rsvg::rsvg_pdf(charToRaw(svg$svg), file, svg$width, svg$height)
+  }
+  if (type == "png") {
+    rsvg::rsvg_png(charToRaw(svg$svg), file, svg$width * 3, svg$height * 3)
+  }
+  if (type == "svg") {
+    writeLines(svg$svg, file)
+  }
+}
+```
+
 
 ### Containerisation
 
@@ -179,8 +201,19 @@ The next step was to make a container div to put the plots in to, enabling the p
 
 There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, the svg can be rendered to other file formats (pdf and png) and produce *exactly* the same plot as the user sees on the screen. Whilst the rendering from `pdf()` `png()` and `svg()` is pretty similar, there are small differences in text rendering which to a pedant like myself was annoying. Unlike before, we can also call the plotting function once in a `reactive()` and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.
 
-The downsides compared to before are that the plots aren't easily edited inside R and to be displayed in Rstudio, they need wrapping in `htmltools::HTML()`. Both of these would relatively easy to resolve though by adding a parameter to the function determine what type of output it produced - either the svg code, the svg wrapped in `htmltools::HTML()` or writing to the graphics device.
+The downsides compared to before are that the plots aren't easily edited inside R and to be displayed in Rstudio, they need wrapping in `htmltools::HTML()`. Both of these would relatively easy to resolve though by adding a parameter to determine what type of output the functions produce - either the svg code, the svg wrapped in `htmltools::HTML()` or writing to the graphics device.
 
 ## End result
 
-Here's the same interactive example after giving it the treatment.
+Here's the same interactive example after giving it the treatment. Now the plot can scale whatever the size of the container. 
+
+```{r echo = TRUE, eval = FALSE}
+
+```
+
+```{=html}
+<iframe src="https://019985f8-8345-84ad-d084-8114e92ba959.share.connect.posit.cloud" width = "100%" height = "1000px"></iframe>
+```
+
+
+You can also see it in action in [the dev version](https://crsu.shinyapps.io/MetaInsight_Scholar/) of the app.

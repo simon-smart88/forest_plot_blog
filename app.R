@@ -56,7 +56,7 @@ crop_svg <- function(svg, margin = 10){
   xml2::xml_attr(rect_node, "width") <- total_width
   xml2::xml_attr(rect_node, "height") <- total_height
 
-  # set the
+  # set the width and height
   xml2::xml_attr(svg_node, "width") <- paste0(bbox$width, "pt")
   xml2::xml_attr(svg_node, "height") <- paste0(bbox$height, "pt")
 
@@ -92,22 +92,20 @@ plotting_function <- function(dataset){
   standalone = TRUE,
   height = plot_height,
   width = plot_width,
-  web_fonts = list(
-    Arimo = "https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&display=swap")
-
+  web_fonts = list("https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&display=swap")
   ) |> crop_svg()
 
 }
 
-write_svg_plot <- function(file, type, svg, height, width) {
+write_svg_plot <- function(file, type, svg) {
   if (type == "pdf") {
-    rsvg::rsvg_pdf(charToRaw(svg), file, width, height)
+    rsvg::rsvg_pdf(charToRaw(svg$svg), file, svg$width, svg$height)
   }
   if (type == "png") {
-    rsvg::rsvg_png(charToRaw(svg), file, width * 3, height * 3)
+    rsvg::rsvg_png(charToRaw(svg$svg), file, svg$width * 3, svg$height * 3)
   }
   if (type == "svg") {
-    writeLines(svg, file)
+    writeLines(svg$svg, file)
   }
 }
 
