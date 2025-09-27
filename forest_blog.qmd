@@ -5,6 +5,7 @@ format:
     code-fold: true
     code-summary: "View code chunk"
     page-layout: full
+    embed-resources: true
   
 ---
 
