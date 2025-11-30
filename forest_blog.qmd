@@ -5,13 +5,14 @@ format:
     code-fold: true
     code-summary: "View code chunk"
     page-layout: full
-    embed-resources: true
-  
+    embed-resources: false
+filters:
+- shinylive
 ---
 
 ## Introduction
 
-I've been working with various base plots in Shiny recently that have been creating difficulties with achieving the desired behaviour in various aspects of scaling. In short, I want plots to display with legible text, without whitespace around them, without cutting off areas of the plots and to respond to screen size. The plotting functions are all from established packages for conducting meta-analyses, so I don't have any option of using alternatives, both because they are very good at what they do, but also because their code is well-validated. I couldn't find a solution elsewhere, so thought it would be sensible to share my solution.
+I've been working with base plots in Shiny recently that have been creating difficulties with achieving the desired behaviour in various aspects of scaling. In short, I want plots to display with legible text, without whitespace around them, without cutting off areas of the plots and to respond to screen size. The plotting functions are all from established packages for conducting meta-analyses, so I don't have any option of using alternatives, both because they are very good at what they do, but also because their code is well-validated. I couldn't find a solution elsewhere, so thought it would be sensible to share what I have come up with.
 
 Here is a screenshot of the [existing app](https://crsu.shinyapps.io/MetaInsight/) to demonstrate the problem: 
 
@@ -19,16 +20,17 @@ Here is a screenshot of the [existing app](https://crsu.shinyapps.io/MetaInsight
 <img src="current.png" width = "100%"/>
 ```
 
-Whilst the plots are visible they are very small and if you decrease the size of the window, they will eventually start to get cut off. Users can upload datasets of various sizes and consequently, both the width and the height need to adjust depending on the data which means calculating a width and height for the plot.
+Whilst the plots are visible they are very small and if you decrease the size of the window, they will eventually start to get cut off. Users can upload datasets of various sizes and consequently, both the width and the height need to adjust depending on the data which means calculating a sensible width and height for the plot and providing them to `renderPlot()`.
 
 ## An interactive example
 
-This plot is different to that shown above, but created with the same function (`meta::forest()`) and demonstrates the same difficulties, just using example datasets. In this example, you can see various problems:
+This plot is different to that shown above, but created with the same function (`meta::forest()`) and demonstrates the same difficulties, but using example datasets and manually set widths and heights. In this example, you can see various problems:
 
 -  Make the width too narrow and the edges of the plot disappear
 -  With the default plot height, there is a lot of whitespace
 -  However you change the width and height of the plot, you can never make the text larger
 -  Switch to the `woodyplants` dataset (a very appropriate name!) and you'll never be able to fit the whole plot on the page
+
 
 ```{r eval = FALSE, echo = TRUE}
 library(shiny)
@@ -40,8 +42,8 @@ ui <- page_sidebar(
 
   sidebar = sidebar(
     selectInput("dataset", "Dataset", choices =  c("Olkin1995", "woodyplants")),
-    sliderInput("width", "Plot width (pixels)", min = 100, max = 1000, value = 800),
-    sliderInput("height", "Plot height (pixels)", min = 400, max = 1000, value = 800)
+    sliderInput("width", "Plot width (pixels)", min = 100, max = 1000, value = 500),
+    sliderInput("height", "Plot height (pixels)", min = 400, max = 1000, value = 400)
   ),
   plotOutput("plot")
 )
@@ -49,31 +51,71 @@ ui <- page_sidebar(
 server <- function(input, output) {
 
   output$plot <- renderPlot({
-    data(woodyplants)
-    data(Olkin1995)
-
     if (input$dataset == "Olkin1995"){
+      data(woodyplants)
       m <- metabin(ev.exp, n.exp, ev.cont, n.cont,
                     data = Olkin1995, subset = c(41, 47, 51, 59),
                     sm = "RR", method = "I",
                     studlab = paste(author, year))
     }
-
     if (input$dataset == "woodyplants"){
+      data(Olkin1995)
       m <- metacont(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,
-                     data = woodyplants, sm = "ROM")}
-
-      meta::forest(m)
-    }, width = \() input$width, height = \() input$height)
-
+                     data = woodyplants, sm = "ROM")
+    }
+    forest(m)
+    }, 
+    width = \() input$width, 
+    height = \() input$height
+  )
 }
 
 shinyApp(ui = ui, server = server)
 ```
 
+```{shinylive-r}
+#| standalone: true
+#| viewerHeight: 1000
 
-```{=html}
-<iframe src="https://shinylive.io/r/app/#h=0&code=NobwRAdghgtgpmAXGKAHVA6ASmANGAYwHsIAXOMpMAGwEsAjAJykYE8AKAZwAtaJWAlAB0IdJiw71OY4aIbM27eKSiyRAV1oACADwBaLaigBzOAH1OtACZx6LdiK1bS3OPC0BeLVLMu3cdgA3OEZLEk8tAFZcLSEwKxYAa2pWOIFcEUctSxs7Rgic23ssp044ajgCUgBJCFR1Ugd4qBUy0jiYuIARFqg2jq0CbiJaAjhOCMGmgHlqRL4ARgBOJciBuIB3IiIrVlRqKDJONPSS7LobRlr6xs3rF3WwAAVqIlItDfvuLXZUWgAPcqcYR4LQwPgRBYABihMRgUH+kJhsK0gSg1HUcAiAA4YacIE5ShcQtcGk1XLRjNx2qC4i83loKVT3r8AUCQXCIV4ACwwuEIpF81HozE4vFZfFOfZvaYNG5NaU02RqCBlRjBfL6LQAM3UECqtBI7D4NxiRDlDQEWhAmQJWnNpBuABJFboDIwKJd6Y0bXanAkVOwtjs9gcjrJCVoA1B2LN5hBlqsVZHaNqfiaGk7o21PF44nHFis1mABL7I04YG6wXAVPQ+Ow4IEMHB-qgYhBm62Yo2MMQyO3eyRSBk-eWx2PoxECwmizFOOopDWIgR2NyFjFuQB2GKRddRJaS8dHyOcSt5sBYLADZTDKwROLVDpnY-jzikdRWA70CJGN8BKANMMjAxKwcAsAIEaEgAvraKZpsadSZtmS4eOewa7PshykMcJZluWlZasoUB9o0HblI2cJgWRFSBHOVjNjRA6wPQlGHBgzF0exMAsc+L4Tr0EToaGWGcHOZ6xBe0wALJpDBEC8URiCINqRAem+SiQU4UExJ8VguPeQjsFaGakE6ukuDETLUgZRlaCZTpWaQKpySIPB8KwACC6DsJoESaHOIQagUgUhLIYBQQAukAA" width = "100%" height = "1000px"></iframe>
+library(shiny)
+library(bslib)
+library(meta)
+
+ui <- page_sidebar(
+  theme = bs_theme(version = 5, "darkly"),
+
+  sidebar = sidebar(
+    selectInput("dataset", "Dataset", choices =  c("Olkin1995", "woodyplants")),
+    sliderInput("width", "Plot width (pixels)", min = 100, max = 1000, value = 500),
+    sliderInput("height", "Plot height (pixels)", min = 400, max = 1000, value = 400)
+  ),
+  plotOutput("plot")
+)
+
+server <- function(input, output) {
+
+  output$plot <- renderPlot({
+    if (input$dataset == "Olkin1995"){
+      data(woodyplants)
+      m <- metabin(ev.exp, n.exp, ev.cont, n.cont,
+                    data = Olkin1995, subset = c(41, 47, 51, 59),
+                    sm = "RR", method = "I",
+                    studlab = paste(author, year))
+    }
+    if (input$dataset == "woodyplants"){
+      data(Olkin1995)
+      m <- metacont(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,
+                     data = woodyplants, sm = "ROM")
+    }
+    forest(m)
+    }, 
+    width = \() input$width, 
+    height = \() input$height
+  )
+
+}
+
+shinyApp(ui = ui, server = server)
 ```
 
 ## SVG to the rescue
@@ -86,7 +128,7 @@ Ideally, I was looking for a function that generates svg code, rather than writi
 
 ```{r echo = TRUE}
 svg <- svglite::xmlSVG({
-  plot(1:5, 1:5)
+  plot(1:5, 1:5, xaxt = "n", yaxt = "n", ylab = "", xlab = "")
 }, standalone = TRUE)
 
 cat(paste(svg, collapse = "\n"))
@@ -181,7 +223,7 @@ write_svg_plot <- function(file, type, svg) {
 
 ### Containerisation
 
-The next step was to make a container div to put the plots in to, enabling the plots to scale dynamically. We need two css rules - one for the container and another for the inside it svg. These are basically saying, take up as much width as possible and adjust the height accordingly i.e. maintaining the aspect ratio. Adding a `max-height: 90vh` might also be sensible, to ensure that very tall plots will always be entirely visible.
+The next step was to make a container div to put the plots in to, enabling the plots to scale dynamically. We need two css rules - one for the container and another for the svg inside it. These are basically saying, take up as much width as possible and adjust the height accordingly i.e. maintaining the aspect ratio. Adding a `max-height: 90vh` might also be sensible, to ensure that very tall plots will always be entirely visible.
 
 ```css
 .svg_container {
@@ -200,7 +242,7 @@ The next step was to make a container div to put the plots in to, enabling the p
 
 ## Side effects
 
-There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, the svg can be rendered to other file formats (pdf and png) and produce *exactly* the same plot as the user sees on the screen. Whilst the rendering from `pdf()` `png()` and `svg()` is pretty similar, there are small differences in text rendering which to a pedant like myself was annoying. Unlike before, we can also call the plotting function once in a `reactive()` and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.
+There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, whilst we still need to provide a width and height to `svglite::xmlSVG()` we only need to worry that the plot will fit inside those dimensions as `crop_svg()` tidies everything up. Thirdly, the svg can be rendered to other file formats (pdf and png) and produce *exactly* the same plot as the user sees on the screen. Whilst the rendering from `pdf()` `png()` and `svg()` is pretty similar, there are small differences in text rendering which to a pedant like myself was annoying. Unlike before, we can also call the plotting function once in a `reactive()` and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.
 
 The downsides compared to before are that the plots aren't easily edited inside R and to be displayed in Rstudio, they need wrapping in `htmltools::HTML()`. Both of these would relatively easy to resolve though by adding a parameter to determine what type of output the functions produce - either the svg code, the svg wrapped in `htmltools::HTML()` or writing to the graphics device.
 
@@ -209,12 +251,181 @@ The downsides compared to before are that the plots aren't easily edited inside 
 Here's the same interactive example after giving it the treatment. Now the plot can scale whatever the size of the container. 
 
 ```{r echo = TRUE, eval = FALSE}
+library(shiny)
+library(bslib)
+library(meta)
+library(svglite)
+library(xml2)
+library(shinyjs)
+
+crop_svg <- function(svg, margin = 10){
+
+  pixel_data <- paste(svg, collapse = "\n") |>
+    magick::image_read_svg() |>
+    magick::image_data()
+
+  # Create a matrix of pixels containing content
+  is_content <- !(
+    # white (all RGB channels > 250)
+    (pixel_data[1,,] > 250 &
+       pixel_data[2,,] > 250 &
+       pixel_data[3,,] > 250)
+  )
+
+  # bodge to get around grey border pixels
+  is_content[, 1] <- FALSE
+  is_content[1, ] <- FALSE
+  is_content[nrow(is_content), ] <- FALSE
+  is_content[, ncol(is_content)] <- FALSE
+
+  content_pixels <- which(is_content, arr.ind = TRUE)
+
+  x_coords <- content_pixels[, 1]
+  y_coords <- content_pixels[, 2]
+
+  x_min <- min(x_coords)
+  x_max <- max(x_coords)
+  y_min <- min(y_coords)
+  y_max <- max(y_coords)
+
+  width <- x_max - x_min
+  height <- y_max - y_min
+
+  bbox <- list(
+    x = x_min - margin,
+    y = y_min - margin,
+    width = width + (margin * 2),
+    height = height + (margin * 2)
+  )
+
+  # update viewBox
+  svg_node <- xml2::xml_find_first(svg, "//svg:svg", ns = c(svg = "http://www.w3.org/2000/svg"))
+  xml2::xml_attr(svg_node, "viewBox") <- paste(bbox$x, bbox$y, bbox$width, bbox$height)
+
+  # fix the background element
+  total_width <- gsub("pt", "", xml2::xml_attr(svg_node, "width"))
+  total_height <- gsub("pt", "", xml2::xml_attr(svg_node, "height"))
+  rect_node <- xml2::xml_find_first(svg, "//svg:rect[@width='100%']", ns = c(svg = "http://www.w3.org/2000/svg"))
+  xml2::xml_attr(rect_node, "width") <- total_width
+  xml2::xml_attr(rect_node, "height") <- total_height
+
+  # set the width and height
+  xml2::xml_attr(svg_node, "width") <- paste0(bbox$width, "pt")
+  xml2::xml_attr(svg_node, "height") <- paste0(bbox$height, "pt")
+
+  list(
+    svg = paste(svg, collapse = "\n"),
+    width = bbox$width,
+    height = bbox$height)
+}
+
+plotting_function <- function(dataset){
+
+  if (dataset == "Olkin1995"){
+    data(Olkin1995)
+    m <- metabin(ev.exp, n.exp, ev.cont, n.cont,
+                 data = Olkin1995, subset = c(41, 47, 51, 59),
+                 sm = "RR", method = "I",
+                 studlab = paste(author, year))
+    plot_height <- 10
+    plot_width <- 15
+  }
+
+  if (dataset == "woodyplants"){
+    data(woodyplants)
+    m <- metacont(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,
+                  data = woodyplants, sm = "ROM")
+    plot_height <- 30
+    plot_width <- 15
+  }
+
+  svglite::xmlSVG({
+    meta::forest(m)
+  },
+  standalone = TRUE,
+  height = plot_height,
+  width = plot_width,
+  web_fonts = list("https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&display=swap")
+  ) |> crop_svg()
+
+}
+
+write_svg_plot <- function(file, type, svg) {
+  if (type == "pdf") {
+    rsvg::rsvg_pdf(charToRaw(svg$svg), file, svg$width, svg$height)
+  }
+  if (type == "png") {
+    rsvg::rsvg_png(charToRaw(svg$svg), file, svg$width * 3, svg$height * 3)
+  }
+  if (type == "svg") {
+    writeLines(svg$svg, file)
+  }
+}
+
+ui <- page_sidebar(
+  shinyjs::useShinyjs(),
+  theme = bs_theme(version = 5, "darkly"),
+  tags$head(tags$style("
+    .svg_container {
+      width: 100%;
+      height: auto;
+      display: block;
+      overflow: hidden;
+    }
+
+    .svg_container svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+                    ")),
+
+  sidebar = sidebar(
+    selectInput("dataset", "Dataset", choices =  c("Olkin1995", "woodyplants")),
+    sliderInput("width", "Plot width (pixels)", min = 100, max = 1000, value = 500),
+    selectInput("format", "Download format", choices = c("svg", "pdf", "png")),
+    downloadButton("download", "Download")
+  ),
+
+  div(id = "plot_container",
+      uiOutput("plot")
+      )
+)
+
+server <- function(input, output) {
+
+  svg <- reactive(plotting_function(input$dataset))
+
+  output$plot <- renderUI({
+    div(class = "svg_container",
+        HTML(svg()$svg))
+  })
+
+  observe({
+    runjs(sprintf("
+      $('#plot_container').css({
+        'width': '%spx'
+      });
+    ", input$width))
+  })
+
+  output$download <- downloadHandler(
+    filename = function() {
+      paste("plot.", input$format, sep="")
+    },
+    content = function(file) {
+      write_svg_plot(file, input$format, svg()$svg, svg()$height, svg()$width)
+    }
+  )
+
+}
+
+shinyApp(ui = ui, server = server)
 
 ```
 
 ```{=html}
 <iframe data-external="1" src="https://019985f8-8345-84ad-d084-8114e92ba959.share.connect.posit.cloud" width = "100%" height = "1000px"></iframe>
 ```
-
 
 You can also see it in action in [the dev version](https://crsu.shinyapps.io/MetaInsight_Scholar/) of the app.

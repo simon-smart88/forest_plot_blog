@@ -109,7 +109,6 @@ write_svg_plot <- function(file, type, svg) {
   }
 }
 
-
 ui <- page_sidebar(
   shinyjs::useShinyjs(),
   theme = bs_theme(version = 5, "darkly"),
@@ -125,18 +124,17 @@ ui <- page_sidebar(
       width: 100%;
       height: auto;
       display: block;
-      max-height:90vh;
     }
                     ")),
 
   sidebar = sidebar(
     selectInput("dataset", "Dataset", choices =  c("Olkin1995", "woodyplants")),
-    sliderInput("width", "Plot width (pixels)", min = 100, max = 1000, value = 800),
+    sliderInput("width", "Plot width (pixels)", min = 100, max = 1000, value = 500),
     selectInput("format", "Download format", choices = c("svg", "pdf", "png")),
     downloadButton("download", "Download")
   ),
 
-  div(id = "plot_container", style = "width: 800px;",
+  div(id = "plot_container",
       uiOutput("plot")
       )
 )
