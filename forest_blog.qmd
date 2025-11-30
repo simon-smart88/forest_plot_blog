@@ -7,7 +7,7 @@ format:
     page-layout: full
     embed-resources: false
 filters:
-- shinylive
+  - shinylive
 ---
 
 ## Introduction
@@ -31,7 +31,6 @@ This plot is different to that shown above, but created with the same function (
 -  However you change the width and height of the plot, you can never make the text larger
 -  Switch to the `woodyplants` dataset (a very appropriate name!) and you'll never be able to fit the whole plot on the page
 
-
 ```{r eval = FALSE, echo = TRUE}
 library(shiny)
 library(bslib)
@@ -52,14 +51,14 @@ server <- function(input, output) {
 
   output$plot <- renderPlot({
     if (input$dataset == "Olkin1995"){
-      data(woodyplants)
+      data(Olkin1995)
       m <- metabin(ev.exp, n.exp, ev.cont, n.cont,
                     data = Olkin1995, subset = c(41, 47, 51, 59),
                     sm = "RR", method = "I",
                     studlab = paste(author, year))
     }
     if (input$dataset == "woodyplants"){
-      data(Olkin1995)
+      data(woodyplants)
       m <- metacont(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,
                      data = woodyplants, sm = "ROM")
     }
@@ -96,14 +95,14 @@ server <- function(input, output) {
 
   output$plot <- renderPlot({
     if (input$dataset == "Olkin1995"){
-      data(woodyplants)
+      data(Olkin1995)
       m <- metabin(ev.exp, n.exp, ev.cont, n.cont,
                     data = Olkin1995, subset = c(41, 47, 51, 59),
                     sm = "RR", method = "I",
                     studlab = paste(author, year))
     }
     if (input$dataset == "woodyplants"){
-      data(Olkin1995)
+      data(woodyplants)
       m <- metacont(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,
                      data = woodyplants, sm = "ROM")
     }
@@ -112,7 +111,6 @@ server <- function(input, output) {
     width = \() input$width, 
     height = \() input$height
   )
-
 }
 
 shinyApp(ui = ui, server = server)

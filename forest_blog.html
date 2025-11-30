@@ -70,6 +70,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="forest_blog_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="forest_blog_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="forest_blog_files/libs/bootstrap/bootstrap-9d8a390dd97085bbea74f0d24a3d8b8c.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<meta name="shinylive:serviceworker_dir" content=".">
+<script src="forest_blog_files/libs/quarto-contrib/shinylive-0.9.1/shinylive/load-shinylive-sw.js" type="module"></script>
+<script src="forest_blog_files/libs/quarto-contrib/shinylive-0.9.1/shinylive/run-python-blocks.js" type="module"></script>
+<link href="forest_blog_files/libs/quarto-contrib/shinylive-0.9.1/shinylive/shinylive.css" rel="stylesheet">
+<link href="forest_blog_files/libs/quarto-contrib/shinylive-quarto-css/shinylive-quarto.css" rel="stylesheet">
 
 
 </head>
@@ -104,56 +109,120 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>I’ve been working with base plots in Shiny recently that have been creating difficulties with achieving the desired behaviour in various aspects of scaling. In short, I want plots to display with legible text, without whitespace around them, without cutting off areas of the plots and to respond to screen size. The plotting functions are all from established packages for conducting meta-analyses, so I don’t have any option of using alternatives, both because they are very good at what they do, but also because their code is well-validated. I couldn’t find a solution elsewhere, so thought it would be sensible to share what I have come up with.</p>
 <p>Here is a screenshot of the <a href="https://crsu.shinyapps.io/MetaInsight/">existing app</a> to demonstrate the problem:</p>
 <img src="current.png" width="100%">
-<p>Whilst the plots are visible they are very small and if you decrease the size of the window, they will eventually start to get cut off. Users can upload datasets of various sizes and consequently, both the width and the height need to adjust depending on the data which means calculating a width and height for the plot.</p>
+<p>Whilst the plots are visible they are very small and if you decrease the size of the window, they will eventually start to get cut off. Users can upload datasets of various sizes and consequently, both the width and the height need to adjust depending on the data which means calculating a sensible width and height for the plot and providing them to <code>renderPlot()</code>.</p>
 </section>
 <section id="an-interactive-example" class="level2">
 <h2 class="anchored" data-anchor-id="an-interactive-example">An interactive example</h2>
-<p>This plot is different to that shown above, but created with the same function (<code>meta::forest()</code>) and demonstrates the same difficulties, just using example datasets. In this example, you can see various problems:</p>
+<p>This plot is different to that shown above, but created with the same function (<code>meta::forest()</code>) and demonstrates the same difficulties, but using example datasets and manually set widths and heights. In this example, you can see various problems:</p>
 <ul>
 <li>Make the width too narrow and the edges of the plot disappear</li>
 <li>With the default plot height, there is a lot of whitespace</li>
 <li>However you change the width and height of the plot, you can never make the text larger</li>
 <li>Switch to the <code>woodyplants</code> dataset (a very appropriate name!) and you’ll never be able to fit the whole plot on the page</li>
 </ul>
-<p>```{shinylive-r, echo = TRUE} #| standalone: true #| viewerHeight: 1000</p>
-<p>library(shiny) library(bslib) library(meta)</p>
-<p>ui &lt;- page_sidebar( theme = bs_theme(version = 5, “darkly”),</p>
-<p>sidebar = sidebar( selectInput(“dataset”, “Dataset”, choices = c(“Olkin1995”, “woodyplants”)), sliderInput(“width”, “Plot width (pixels)”, min = 100, max = 1000, value = 500), sliderInput(“height”, “Plot height (pixels)”, min = 400, max = 1000, value = 400) ), plotOutput(“plot”) )</p>
-<p>server &lt;- function(input, output) {</p>
-<p>output$plot &lt;- renderPlot({ data(woodyplants) data(Olkin1995)</p>
-<pre><code>if (input$dataset == "Olkin1995"){
-  m &lt;- metabin(ev.exp, n.exp, ev.cont, n.cont,
-                data = Olkin1995, subset = c(41, 47, 51, 59),
-                sm = "RR", method = "I",
-                studlab = paste(author, year))
+<div class="cell">
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(shiny)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(bslib)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(meta)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>ui <span class="ot">&lt;-</span> <span class="fu">page_sidebar</span>(</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">theme =</span> <span class="fu">bs_theme</span>(<span class="at">version =</span> <span class="dv">5</span>, <span class="st">"darkly"</span>),</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">sidebar =</span> <span class="fu">sidebar</span>(</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">selectInput</span>(<span class="st">"dataset"</span>, <span class="st">"Dataset"</span>, <span class="at">choices =</span>  <span class="fu">c</span>(<span class="st">"Olkin1995"</span>, <span class="st">"woodyplants"</span>)),</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">sliderInput</span>(<span class="st">"width"</span>, <span class="st">"Plot width (pixels)"</span>, <span class="at">min =</span> <span class="dv">100</span>, <span class="at">max =</span> <span class="dv">1000</span>, <span class="at">value =</span> <span class="dv">500</span>),</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">sliderInput</span>(<span class="st">"height"</span>, <span class="st">"Plot height (pixels)"</span>, <span class="at">min =</span> <span class="dv">400</span>, <span class="at">max =</span> <span class="dv">1000</span>, <span class="at">value =</span> <span class="dv">400</span>)</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plotOutput</span>(<span class="st">"plot"</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>server <span class="ot">&lt;-</span> <span class="cf">function</span>(input, output) {</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>  output<span class="sc">$</span>plot <span class="ot">&lt;-</span> <span class="fu">renderPlot</span>({</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (input<span class="sc">$</span>dataset <span class="sc">==</span> <span class="st">"Olkin1995"</span>){</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>      <span class="fu">data</span>(Olkin1995)</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>      m <span class="ot">&lt;-</span> <span class="fu">metabin</span>(ev.exp, n.exp, ev.cont, n.cont,</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>                    <span class="at">data =</span> Olkin1995, <span class="at">subset =</span> <span class="fu">c</span>(<span class="dv">41</span>, <span class="dv">47</span>, <span class="dv">51</span>, <span class="dv">59</span>),</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>                    <span class="at">sm =</span> <span class="st">"RR"</span>, <span class="at">method =</span> <span class="st">"I"</span>,</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>                    <span class="at">studlab =</span> <span class="fu">paste</span>(author, year))</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (input<span class="sc">$</span>dataset <span class="sc">==</span> <span class="st">"woodyplants"</span>){</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>      <span class="fu">data</span>(woodyplants)</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>      m <span class="ot">&lt;-</span> <span class="fu">metacont</span>(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>                     <span class="at">data =</span> woodyplants, <span class="at">sm =</span> <span class="st">"ROM"</span>)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="fu">forest</span>(m)</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    }, </span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">width =</span> \() input<span class="sc">$</span>width, </span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="at">height =</span> \() input<span class="sc">$</span>height</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a><span class="fu">shinyApp</span>(<span class="at">ui =</span> ui, <span class="at">server =</span> server)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<pre class="shinylive-r" data-engine="r"><code>#| '!! shinylive warning !!': |
+#|   shinylive does not work in self-contained HTML documents.
+#|   Please set `embed-resources: false` in your metadata.
+#| standalone: true
+#| viewerHeight: 1000
+
+library(shiny)
+library(bslib)
+library(meta)
+
+ui &lt;- page_sidebar(
+  theme = bs_theme(version = 5, "darkly"),
+
+  sidebar = sidebar(
+    selectInput("dataset", "Dataset", choices =  c("Olkin1995", "woodyplants")),
+    sliderInput("width", "Plot width (pixels)", min = 100, max = 1000, value = 500),
+    sliderInput("height", "Plot height (pixels)", min = 400, max = 1000, value = 400)
+  ),
+  plotOutput("plot")
+)
+
+server &lt;- function(input, output) {
+
+  output$plot &lt;- renderPlot({
+    if (input$dataset == "Olkin1995"){
+      data(Olkin1995)
+      m &lt;- metabin(ev.exp, n.exp, ev.cont, n.cont,
+                    data = Olkin1995, subset = c(41, 47, 51, 59),
+                    sm = "RR", method = "I",
+                    studlab = paste(author, year))
+    }
+    if (input$dataset == "woodyplants"){
+      data(woodyplants)
+      m &lt;- metacont(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,
+                     data = woodyplants, sm = "ROM")
+    }
+    forest(m)
+    }, 
+    width = \() input$width, 
+    height = \() input$height
+  )
 }
 
-if (input$dataset == "woodyplants"){
-  m &lt;- metacont(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,
-                 data = woodyplants, sm = "ROM")}
-
-  meta::forest(m)
-}, width = \() input$width, height = \() input$height)</code></pre>
-<p>}</p>
-<p>shinyApp(ui = ui, server = server)</p>
-<pre><code>
-## SVG to the rescue
-
-In one part of the existing app, this was already causing a problem where three plots were being displayed side-by-side and even on a wide screen, the plot did not fit inside the column. As a workaround, the plot was being rendered to a png file and then read back in to display. This fixed the problem of the edges being cut off, but there was white space around the plot which made it especially small. This workaround got me thinking though and I thought it would be much better if instead of rendering the plot to a png, it was rendered to an svg (scalable vector graphic), which, if inside an appropriate container can always be scaled to fit inside. SVGs are a great format and use code to produce graphics in an analagous way to how html can be used to produce text.
-
-### svglite
-
-Ideally, I was looking for a function that generates svg code, rather than writing to a file like `svg()` does to avoid writing and reading to file unnecessarily. After some searching I came across `svglite::xmlSVG()` which does exactly what I wanted. `svglite::stringSVG()` is very similar, but as we'll see later on, getting the output as an `{xml2}` object rather than a character has advantages when it comes to editing. The svg code output of a very minimal plot is shown below, followed by the resultant plot. The `paste(svg, collapse = "\n")` here and elsewhere is needed to convert the `{xml2}` object to a string.
-
-
-::: {.cell}
-
-```{.r .cell-code}
-svg &lt;- svglite::xmlSVG({
-  plot(1:5, 1:5)
-}, standalone = TRUE)
-
-cat(paste(svg, collapse = "\n"))</code></pre>
+shinyApp(ui = ui, server = server)</code></pre>
+</section>
+<section id="svg-to-the-rescue" class="level2">
+<h2 class="anchored" data-anchor-id="svg-to-the-rescue">SVG to the rescue</h2>
+<p>In one part of the existing app, this was already causing a problem where three plots were being displayed side-by-side and even on a wide screen, the plot did not fit inside the column. As a workaround, the plot was being rendered to a png file and then read back in to display. This fixed the problem of the edges being cut off, but there was white space around the plot which made it especially small. This workaround got me thinking though and I thought it would be much better if instead of rendering the plot to a png, it was rendered to an svg (scalable vector graphic), which, if inside an appropriate container can always be scaled to fit inside. SVGs are a great format and use code to produce graphics in an analagous way to how html can be used to produce text.</p>
+<section id="svglite" class="level3">
+<h3 class="anchored" data-anchor-id="svglite">svglite</h3>
+<p>Ideally, I was looking for a function that generates svg code, rather than writing to a file like <code>svg()</code> does to avoid writing and reading to file unnecessarily. After some searching I came across <code>svglite::xmlSVG()</code> which does exactly what I wanted. <code>svglite::stringSVG()</code> is very similar, but as we’ll see later on, getting the output as an <code>{xml2}</code> object rather than a character has advantages when it comes to editing. The svg code output of a very minimal plot is shown below, followed by the resultant plot. The <code>paste(svg, collapse = "\n")</code> here and elsewhere is needed to convert the <code>{xml2}</code> object to a string.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>svg <span class="ot">&lt;-</span> svglite<span class="sc">::</span><span class="fu">xmlSVG</span>({</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, <span class="at">xaxt =</span> <span class="st">"n"</span>, <span class="at">yaxt =</span> <span class="st">"n"</span>, <span class="at">ylab =</span> <span class="st">""</span>, <span class="at">xlab =</span> <span class="st">""</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>}, <span class="at">standalone =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
 <div class="cell-output cell-output-stdout">
 <pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
 &lt;svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="504.00pt" height="504.00pt" viewBox="0 0 504.00 504.00"&gt;
@@ -197,39 +266,15 @@ cat(paste(svg, collapse = "\n"))</code></pre>
       &lt;circle cx="458.40" cy="72.80" r="2.70" style="stroke-width: 0.75;"/&gt;
     &lt;/g&gt;
     &lt;g clip-path="url(#cpMC4wMHw1MDQuMDB8MC4wMHw1MDQuMDA=)"&gt;
-      &lt;line x1="74.40" y1="430.56" x2="458.40" y2="430.56" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="74.40" y1="430.56" x2="74.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="170.40" y1="430.56" x2="170.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="266.40" y1="430.56" x2="266.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="362.40" y1="430.56" x2="362.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="458.40" y1="430.56" x2="458.40" y2="437.76" style="stroke-width: 0.75;"/&gt;
-      &lt;text x="74.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;1&lt;/text&gt;
-      &lt;text x="170.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;2&lt;/text&gt;
-      &lt;text x="266.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;3&lt;/text&gt;
-      &lt;text x="362.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;4&lt;/text&gt;
-      &lt;text x="458.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;5&lt;/text&gt;
-      &lt;line x1="59.04" y1="416.80" x2="59.04" y2="72.80" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="59.04" y1="416.80" x2="51.84" y2="416.80" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="59.04" y1="330.80" x2="51.84" y2="330.80" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="59.04" y1="244.80" x2="51.84" y2="244.80" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="59.04" y1="158.80" x2="51.84" y2="158.80" style="stroke-width: 0.75;"/&gt;
-      &lt;line x1="59.04" y1="72.80" x2="51.84" y2="72.80" style="stroke-width: 0.75;"/&gt;
-      &lt;text transform="translate(41.76,416.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;1&lt;/text&gt;
-      &lt;text transform="translate(41.76,330.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;2&lt;/text&gt;
-      &lt;text transform="translate(41.76,244.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;3&lt;/text&gt;
-      &lt;text transform="translate(41.76,158.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;4&lt;/text&gt;
-      &lt;text transform="translate(41.76,72.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="6.67px" lengthAdjust="spacingAndGlyphs"&gt;5&lt;/text&gt;
       &lt;polygon points="59.04,430.56 473.76,430.56 473.76,59.04 59.04,59.04 " style="stroke-width: 0.75;"/&gt;
-      &lt;text x="266.40" y="485.28" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="16.67px" lengthAdjust="spacingAndGlyphs"&gt;1:5&lt;/text&gt;
-      &lt;text transform="translate(12.96,244.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &amp;quot;Arimo&amp;quot;;" textLength="16.67px" lengthAdjust="spacingAndGlyphs"&gt;1:5&lt;/text&gt;
     &lt;/g&gt;
   &lt;/g&gt;
 &lt;/svg&gt;</code></pre>
 </div>
-<p>:::</p>
+</div>
 <details class="code-fold">
 <summary>View code chunk</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>htmltools<span class="sc">::</span><span class="fu">HTML</span>(<span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>htmltools<span class="sc">::</span><span class="fu">HTML</span>(<span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <!--?xml version="1.0" encoding="UTF-8"?-->
 <svg xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" width="504.00pt" height="504.00pt" viewbox="0 0 504.00 504.00">
@@ -273,31 +318,7 @@ cat(paste(svg, collapse = "\n"))</code></pre>
       <circle cx="458.40" cy="72.80" r="2.70" style="stroke-width: 0.75;"></circle>
     </g>
     <g clip-path="url(#cpMC4wMHw1MDQuMDB8MC4wMHw1MDQuMDA=)">
-      <line x1="74.40" y1="430.56" x2="458.40" y2="430.56" style="stroke-width: 0.75;"></line>
-      <line x1="74.40" y1="430.56" x2="74.40" y2="437.76" style="stroke-width: 0.75;"></line>
-      <line x1="170.40" y1="430.56" x2="170.40" y2="437.76" style="stroke-width: 0.75;"></line>
-      <line x1="266.40" y1="430.56" x2="266.40" y2="437.76" style="stroke-width: 0.75;"></line>
-      <line x1="362.40" y1="430.56" x2="362.40" y2="437.76" style="stroke-width: 0.75;"></line>
-      <line x1="458.40" y1="430.56" x2="458.40" y2="437.76" style="stroke-width: 0.75;"></line>
-      <text x="74.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">1</text>
-      <text x="170.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">2</text>
-      <text x="266.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">3</text>
-      <text x="362.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">4</text>
-      <text x="458.40" y="456.48" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">5</text>
-      <line x1="59.04" y1="416.80" x2="59.04" y2="72.80" style="stroke-width: 0.75;"></line>
-      <line x1="59.04" y1="416.80" x2="51.84" y2="416.80" style="stroke-width: 0.75;"></line>
-      <line x1="59.04" y1="330.80" x2="51.84" y2="330.80" style="stroke-width: 0.75;"></line>
-      <line x1="59.04" y1="244.80" x2="51.84" y2="244.80" style="stroke-width: 0.75;"></line>
-      <line x1="59.04" y1="158.80" x2="51.84" y2="158.80" style="stroke-width: 0.75;"></line>
-      <line x1="59.04" y1="72.80" x2="51.84" y2="72.80" style="stroke-width: 0.75;"></line>
-      <text transform="translate(41.76,416.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">1</text>
-      <text transform="translate(41.76,330.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">2</text>
-      <text transform="translate(41.76,244.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">3</text>
-      <text transform="translate(41.76,158.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">4</text>
-      <text transform="translate(41.76,72.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="6.67px" lengthadjust="spacingAndGlyphs">5</text>
       <polygon points="59.04,430.56 473.76,430.56 473.76,59.04 59.04,59.04 " style="stroke-width: 0.75;"></polygon>
-      <text x="266.40" y="485.28" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="16.67px" lengthadjust="spacingAndGlyphs">1:5</text>
-      <text transform="translate(12.96,244.80) rotate(-90)" text-anchor="middle" style="font-size: 12.00px; font-family: &quot;Arimo&quot;;" textlength="16.67px" lengthadjust="spacingAndGlyphs">1:5</text>
     </g>
   </g>
 </svg>
@@ -306,13 +327,14 @@ cat(paste(svg, collapse = "\n"))</code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>View code chunk</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>svg <span class="ot">&lt;-</span> svglite<span class="sc">::</span><span class="fu">xmlSVG</span>({</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>)</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>}, <span class="at">standalone =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a> <span class="at">web_fonts =</span> <span class="fu">list</span>(<span class="st">"https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&amp;display=swap"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>svg <span class="ot">&lt;-</span> svglite<span class="sc">::</span><span class="fu">xmlSVG</span>({</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>}, <span class="at">standalone =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a> <span class="at">web_fonts =</span> <span class="fu">list</span>(<span class="st">"https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&amp;display=swap"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 <p>We also need to calculate sensible values for width and height, but at least now we only have to do that once when we generate the plot and can rescale it however we like afterwards.</p>
+</section>
 <section id="cropping" class="level3">
 <h3 class="anchored" data-anchor-id="cropping">Cropping</h3>
 <p>This largely solved the problem in the app, but I’m also producing an html report and some of the plots had a lot of whitespace below them leading to gaps between the outputs in the report. I knew that I could crop SVGs by adjusting their <code>viewBox</code> parameter, which acts like a window into the canvas, but figuring out where the content would be from the code was difficult, if not impossible. Seemingly, the only way to do this is to render the svg to pixels, for example via <code>paste(svg, collapse = "\n") |&gt; magick::image_read_svg() |&gt; magick::image_data()</code>, and then search for the outermost pixels that aren’t white. I was worried this would be slow, but it ended up only taking ~0.1 seconds which seems reasonable enough.</p>
@@ -320,97 +342,272 @@ cat(paste(svg, collapse = "\n"))</code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>View code chunk</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>pixel_data <span class="ot">&lt;-</span> <span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  magick<span class="sc">::</span><span class="fu">image_read_svg</span>() <span class="sc">|&gt;</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  magick<span class="sc">::</span><span class="fu">image_data</span>()</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a matrix of pixels containing content</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>is_content <span class="ot">&lt;-</span> <span class="sc">!</span>(</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="co"># white (all RGB channels &gt; 250)</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  (pixel_data[<span class="dv">1</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span> <span class="sc">&amp;</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>     pixel_data[<span class="dv">2</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span> <span class="sc">&amp;</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>     pixel_data[<span class="dv">3</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span>)</span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>content_pixels <span class="ot">&lt;-</span> <span class="fu">which</span>(is_content, <span class="at">arr.ind =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>x_coords <span class="ot">&lt;-</span> content_pixels[, <span class="dv">1</span>]</span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>y_coords <span class="ot">&lt;-</span> content_pixels[, <span class="dv">2</span>]</span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>x_min <span class="ot">&lt;-</span> <span class="fu">min</span>(x_coords)</span>
-<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>x_max <span class="ot">&lt;-</span> <span class="fu">max</span>(x_coords)</span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>y_min <span class="ot">&lt;-</span> <span class="fu">min</span>(y_coords)</span>
-<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>y_max <span class="ot">&lt;-</span> <span class="fu">max</span>(y_coords)</span>
-<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>width <span class="ot">&lt;-</span> x_max <span class="sc">-</span> x_min</span>
-<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>height <span class="ot">&lt;-</span> y_max <span class="sc">-</span> y_min</span>
-<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>bbox <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">x =</span> x_min <span class="sc">-</span> margin,</span>
-<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">y =</span> y_min <span class="sc">-</span> margin,</span>
-<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>  <span class="at">width =</span> width <span class="sc">+</span> (margin <span class="sc">*</span> <span class="dv">2</span>),</span>
-<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>  <span class="at">height =</span> height <span class="sc">+</span> (margin <span class="sc">*</span> <span class="dv">2</span>)</span>
-<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a><span class="co"># update viewBox</span></span>
-<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>svg_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(svg, <span class="st">"//svg:svg"</span>, <span class="at">ns =</span> <span class="fu">c</span>(<span class="at">svg =</span> <span class="st">"http://www.w3.org/2000/svg"</span>))</span>
-<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"viewBox"</span>) <span class="ot">&lt;-</span> <span class="fu">paste</span>(bbox<span class="sc">$</span>x, bbox<span class="sc">$</span>y, bbox<span class="sc">$</span>width, bbox<span class="sc">$</span>height)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>pixel_data <span class="ot">&lt;-</span> <span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  magick<span class="sc">::</span><span class="fu">image_read_svg</span>() <span class="sc">|&gt;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  magick<span class="sc">::</span><span class="fu">image_data</span>()</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a matrix of pixels containing content</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>is_content <span class="ot">&lt;-</span> <span class="sc">!</span>(</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>  <span class="co"># white (all RGB channels &gt; 250)</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>  (pixel_data[<span class="dv">1</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span> <span class="sc">&amp;</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>     pixel_data[<span class="dv">2</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span> <span class="sc">&amp;</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>     pixel_data[<span class="dv">3</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span>)</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>content_pixels <span class="ot">&lt;-</span> <span class="fu">which</span>(is_content, <span class="at">arr.ind =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>x_coords <span class="ot">&lt;-</span> content_pixels[, <span class="dv">1</span>]</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>y_coords <span class="ot">&lt;-</span> content_pixels[, <span class="dv">2</span>]</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>x_min <span class="ot">&lt;-</span> <span class="fu">min</span>(x_coords)</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>x_max <span class="ot">&lt;-</span> <span class="fu">max</span>(x_coords)</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>y_min <span class="ot">&lt;-</span> <span class="fu">min</span>(y_coords)</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>y_max <span class="ot">&lt;-</span> <span class="fu">max</span>(y_coords)</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>width <span class="ot">&lt;-</span> x_max <span class="sc">-</span> x_min</span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>height <span class="ot">&lt;-</span> y_max <span class="sc">-</span> y_min</span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>bbox <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">x =</span> x_min <span class="sc">-</span> margin,</span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">y =</span> y_min <span class="sc">-</span> margin,</span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>  <span class="at">width =</span> width <span class="sc">+</span> (margin <span class="sc">*</span> <span class="dv">2</span>),</span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>  <span class="at">height =</span> height <span class="sc">+</span> (margin <span class="sc">*</span> <span class="dv">2</span>)</span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a><span class="co"># update viewBox</span></span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>svg_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(svg, <span class="st">"//svg:svg"</span>, <span class="at">ns =</span> <span class="fu">c</span>(<span class="at">svg =</span> <span class="st">"http://www.w3.org/2000/svg"</span>))</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"viewBox"</span>) <span class="ot">&lt;-</span> <span class="fu">paste</span>(bbox<span class="sc">$</span>x, bbox<span class="sc">$</span>y, bbox<span class="sc">$</span>width, bbox<span class="sc">$</span>height)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 <p>Further annoyance came when I went to download the plots as pngs rendered from the svg and found that some of the background was transparent. I’m not sure why this happens as the background was already set as <code>&lt;rect width = "100%" height = "100%" fill = "white"/&gt;</code> but after some fiddling, I found I could get the desired result by hard-coding the width and height in pixels instead and this is where having the output as xml came in handy:</p>
 <div class="cell">
 <details class="code-fold">
 <summary>View code chunk</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>total_width <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"width"</span>))</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>total_height <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"height"</span>))</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>rect_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(svg, <span class="st">"//svg:rect[@width='100%']"</span>, <span class="at">ns =</span> <span class="fu">c</span>(<span class="at">svg =</span> <span class="st">"http://www.w3.org/2000/svg"</span>))</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"width"</span>) <span class="ot">&lt;-</span> total_width</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"height"</span>) <span class="ot">&lt;-</span> total_height</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>total_width <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"width"</span>))</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>total_height <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"height"</span>))</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>rect_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(svg, <span class="st">"//svg:rect[@width='100%']"</span>, <span class="at">ns =</span> <span class="fu">c</span>(<span class="at">svg =</span> <span class="st">"http://www.w3.org/2000/svg"</span>))</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"width"</span>) <span class="ot">&lt;-</span> total_width</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"height"</span>) <span class="ot">&lt;-</span> total_height</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 <p>The width and height of the <code>viewBox</code> are also returned by the cropping function which enables rendering the plot to other file formats using <code>{rsvg}</code>.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>View code chunk</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>write_svg_plot <span class="ot">&lt;-</span> <span class="cf">function</span>(file, type, svg) {</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"pdf"</span>) {</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    rsvg<span class="sc">::</span><span class="fu">rsvg_pdf</span>(<span class="fu">charToRaw</span>(svg<span class="sc">$</span>svg), file, svg<span class="sc">$</span>width, svg<span class="sc">$</span>height)</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"png"</span>) {</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    rsvg<span class="sc">::</span><span class="fu">rsvg_png</span>(<span class="fu">charToRaw</span>(svg<span class="sc">$</span>svg), file, svg<span class="sc">$</span>width <span class="sc">*</span> <span class="dv">3</span>, svg<span class="sc">$</span>height <span class="sc">*</span> <span class="dv">3</span>)</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"svg"</span>) {</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">writeLines</span>(svg<span class="sc">$</span>svg, file)</span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>write_svg_plot <span class="ot">&lt;-</span> <span class="cf">function</span>(file, type, svg) {</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"pdf"</span>) {</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    rsvg<span class="sc">::</span><span class="fu">rsvg_pdf</span>(<span class="fu">charToRaw</span>(svg<span class="sc">$</span>svg), file, svg<span class="sc">$</span>width, svg<span class="sc">$</span>height)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"png"</span>) {</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    rsvg<span class="sc">::</span><span class="fu">rsvg_png</span>(<span class="fu">charToRaw</span>(svg<span class="sc">$</span>svg), file, svg<span class="sc">$</span>width <span class="sc">*</span> <span class="dv">3</span>, svg<span class="sc">$</span>height <span class="sc">*</span> <span class="dv">3</span>)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"svg"</span>) {</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">writeLines</span>(svg<span class="sc">$</span>svg, file)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 </section>
 <section id="containerisation" class="level3">
 <h3 class="anchored" data-anchor-id="containerisation">Containerisation</h3>
 <p>The next step was to make a container div to put the plots in to, enabling the plots to scale dynamically. We need two css rules - one for the container and another for the svg inside it. These are basically saying, take up as much width as possible and adjust the height accordingly i.e.&nbsp;maintaining the aspect ratio. Adding a <code>max-height: 90vh</code> might also be sensible, to ensure that very tall plots will always be entirely visible.</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode css code-with-copy"><code class="sourceCode css"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> {</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="kw">overflow</span><span class="ch">:</span> <span class="dv">hidden</span><span class="op">;</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> svg {</span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
-<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
-<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode css code-with-copy"><code class="sourceCode css"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> {</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="kw">overflow</span><span class="ch">:</span> <span class="dv">hidden</span><span class="op">;</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="fu">.svg_container</span> svg {</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>  <span class="kw">width</span><span class="ch">:</span> <span class="dv">100</span><span class="dt">%</span><span class="op">;</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>  <span class="kw">height</span><span class="ch">:</span> <span class="bu">auto</span><span class="op">;</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>  <span class="kw">display</span><span class="ch">:</span> <span class="dv">block</span><span class="op">;</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="side-effects" class="level2">
 <h2 class="anchored" data-anchor-id="side-effects">Side effects</h2>
-<p>There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, the svg can be rendered to other file formats (pdf and png) and produce <em>exactly</em> the same plot as the user sees on the screen. Whilst the rendering from <code>pdf()</code> <code>png()</code> and <code>svg()</code> is pretty similar, there are small differences in text rendering which to a pedant like myself was annoying. Unlike before, we can also call the plotting function once in a <code>reactive()</code> and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.</p>
+<p>There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, whilst we still need to provide a width and height to <code>svglite::xmlSVG()</code> we only need to worry that the plot will fit inside those dimensions as <code>crop_svg()</code> tidies everything up. Thirdly, the svg can be rendered to other file formats (pdf and png) and produce <em>exactly</em> the same plot as the user sees on the screen. Whilst the rendering from <code>pdf()</code> <code>png()</code> and <code>svg()</code> is pretty similar, there are small differences in text rendering which to a pedant like myself was annoying. Unlike before, we can also call the plotting function once in a <code>reactive()</code> and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.</p>
 <p>The downsides compared to before are that the plots aren’t easily edited inside R and to be displayed in Rstudio, they need wrapping in <code>htmltools::HTML()</code>. Both of these would relatively easy to resolve though by adding a parameter to determine what type of output the functions produce - either the svg code, the svg wrapped in <code>htmltools::HTML()</code> or writing to the graphics device.</p>
 </section>
 <section id="end-result" class="level2">
 <h2 class="anchored" data-anchor-id="end-result">End result</h2>
 <p>Here’s the same interactive example after giving it the treatment. Now the plot can scale whatever the size of the container.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>View code chunk</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(shiny)</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(bslib)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(meta)</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(svglite)</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(xml2)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(shinyjs)</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>crop_svg <span class="ot">&lt;-</span> <span class="cf">function</span>(svg, <span class="at">margin =</span> <span class="dv">10</span>){</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>  pixel_data <span class="ot">&lt;-</span> <span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    magick<span class="sc">::</span><span class="fu">image_read_svg</span>() <span class="sc">|&gt;</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>    magick<span class="sc">::</span><span class="fu">image_data</span>()</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Create a matrix of pixels containing content</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>  is_content <span class="ot">&lt;-</span> <span class="sc">!</span>(</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    <span class="co"># white (all RGB channels &gt; 250)</span></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>    (pixel_data[<span class="dv">1</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span> <span class="sc">&amp;</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>       pixel_data[<span class="dv">2</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span> <span class="sc">&amp;</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>       pixel_data[<span class="dv">3</span>,,] <span class="sc">&gt;</span> <span class="dv">250</span>)</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>  <span class="co"># bodge to get around grey border pixels</span></span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>  is_content[, <span class="dv">1</span>] <span class="ot">&lt;-</span> <span class="cn">FALSE</span></span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>  is_content[<span class="dv">1</span>, ] <span class="ot">&lt;-</span> <span class="cn">FALSE</span></span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>  is_content[<span class="fu">nrow</span>(is_content), ] <span class="ot">&lt;-</span> <span class="cn">FALSE</span></span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>  is_content[, <span class="fu">ncol</span>(is_content)] <span class="ot">&lt;-</span> <span class="cn">FALSE</span></span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>  content_pixels <span class="ot">&lt;-</span> <span class="fu">which</span>(is_content, <span class="at">arr.ind =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>  x_coords <span class="ot">&lt;-</span> content_pixels[, <span class="dv">1</span>]</span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a>  y_coords <span class="ot">&lt;-</span> content_pixels[, <span class="dv">2</span>]</span>
+<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a>  x_min <span class="ot">&lt;-</span> <span class="fu">min</span>(x_coords)</span>
+<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>  x_max <span class="ot">&lt;-</span> <span class="fu">max</span>(x_coords)</span>
+<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>  y_min <span class="ot">&lt;-</span> <span class="fu">min</span>(y_coords)</span>
+<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>  y_max <span class="ot">&lt;-</span> <span class="fu">max</span>(y_coords)</span>
+<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>  width <span class="ot">&lt;-</span> x_max <span class="sc">-</span> x_min</span>
+<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>  height <span class="ot">&lt;-</span> y_max <span class="sc">-</span> y_min</span>
+<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a>  bbox <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> x_min <span class="sc">-</span> margin,</span>
+<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> y_min <span class="sc">-</span> margin,</span>
+<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>    <span class="at">width =</span> width <span class="sc">+</span> (margin <span class="sc">*</span> <span class="dv">2</span>),</span>
+<span id="cb11-45"><a href="#cb11-45" aria-hidden="true" tabindex="-1"></a>    <span class="at">height =</span> height <span class="sc">+</span> (margin <span class="sc">*</span> <span class="dv">2</span>)</span>
+<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-48"><a href="#cb11-48" aria-hidden="true" tabindex="-1"></a>  <span class="co"># update viewBox</span></span>
+<span id="cb11-49"><a href="#cb11-49" aria-hidden="true" tabindex="-1"></a>  svg_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(svg, <span class="st">"//svg:svg"</span>, <span class="at">ns =</span> <span class="fu">c</span>(<span class="at">svg =</span> <span class="st">"http://www.w3.org/2000/svg"</span>))</span>
+<span id="cb11-50"><a href="#cb11-50" aria-hidden="true" tabindex="-1"></a>  xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"viewBox"</span>) <span class="ot">&lt;-</span> <span class="fu">paste</span>(bbox<span class="sc">$</span>x, bbox<span class="sc">$</span>y, bbox<span class="sc">$</span>width, bbox<span class="sc">$</span>height)</span>
+<span id="cb11-51"><a href="#cb11-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-52"><a href="#cb11-52" aria-hidden="true" tabindex="-1"></a>  <span class="co"># fix the background element</span></span>
+<span id="cb11-53"><a href="#cb11-53" aria-hidden="true" tabindex="-1"></a>  total_width <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"width"</span>))</span>
+<span id="cb11-54"><a href="#cb11-54" aria-hidden="true" tabindex="-1"></a>  total_height <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"pt"</span>, <span class="st">""</span>, xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"height"</span>))</span>
+<span id="cb11-55"><a href="#cb11-55" aria-hidden="true" tabindex="-1"></a>  rect_node <span class="ot">&lt;-</span> xml2<span class="sc">::</span><span class="fu">xml_find_first</span>(svg, <span class="st">"//svg:rect[@width='100%']"</span>, <span class="at">ns =</span> <span class="fu">c</span>(<span class="at">svg =</span> <span class="st">"http://www.w3.org/2000/svg"</span>))</span>
+<span id="cb11-56"><a href="#cb11-56" aria-hidden="true" tabindex="-1"></a>  xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"width"</span>) <span class="ot">&lt;-</span> total_width</span>
+<span id="cb11-57"><a href="#cb11-57" aria-hidden="true" tabindex="-1"></a>  xml2<span class="sc">::</span><span class="fu">xml_attr</span>(rect_node, <span class="st">"height"</span>) <span class="ot">&lt;-</span> total_height</span>
+<span id="cb11-58"><a href="#cb11-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-59"><a href="#cb11-59" aria-hidden="true" tabindex="-1"></a>  <span class="co"># set the width and height</span></span>
+<span id="cb11-60"><a href="#cb11-60" aria-hidden="true" tabindex="-1"></a>  xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"width"</span>) <span class="ot">&lt;-</span> <span class="fu">paste0</span>(bbox<span class="sc">$</span>width, <span class="st">"pt"</span>)</span>
+<span id="cb11-61"><a href="#cb11-61" aria-hidden="true" tabindex="-1"></a>  xml2<span class="sc">::</span><span class="fu">xml_attr</span>(svg_node, <span class="st">"height"</span>) <span class="ot">&lt;-</span> <span class="fu">paste0</span>(bbox<span class="sc">$</span>height, <span class="st">"pt"</span>)</span>
+<span id="cb11-62"><a href="#cb11-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-63"><a href="#cb11-63" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb11-64"><a href="#cb11-64" aria-hidden="true" tabindex="-1"></a>    <span class="at">svg =</span> <span class="fu">paste</span>(svg, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>),</span>
+<span id="cb11-65"><a href="#cb11-65" aria-hidden="true" tabindex="-1"></a>    <span class="at">width =</span> bbox<span class="sc">$</span>width,</span>
+<span id="cb11-66"><a href="#cb11-66" aria-hidden="true" tabindex="-1"></a>    <span class="at">height =</span> bbox<span class="sc">$</span>height)</span>
+<span id="cb11-67"><a href="#cb11-67" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb11-68"><a href="#cb11-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-69"><a href="#cb11-69" aria-hidden="true" tabindex="-1"></a>plotting_function <span class="ot">&lt;-</span> <span class="cf">function</span>(dataset){</span>
+<span id="cb11-70"><a href="#cb11-70" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-71"><a href="#cb11-71" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (dataset <span class="sc">==</span> <span class="st">"Olkin1995"</span>){</span>
+<span id="cb11-72"><a href="#cb11-72" aria-hidden="true" tabindex="-1"></a>    <span class="fu">data</span>(Olkin1995)</span>
+<span id="cb11-73"><a href="#cb11-73" aria-hidden="true" tabindex="-1"></a>    m <span class="ot">&lt;-</span> <span class="fu">metabin</span>(ev.exp, n.exp, ev.cont, n.cont,</span>
+<span id="cb11-74"><a href="#cb11-74" aria-hidden="true" tabindex="-1"></a>                 <span class="at">data =</span> Olkin1995, <span class="at">subset =</span> <span class="fu">c</span>(<span class="dv">41</span>, <span class="dv">47</span>, <span class="dv">51</span>, <span class="dv">59</span>),</span>
+<span id="cb11-75"><a href="#cb11-75" aria-hidden="true" tabindex="-1"></a>                 <span class="at">sm =</span> <span class="st">"RR"</span>, <span class="at">method =</span> <span class="st">"I"</span>,</span>
+<span id="cb11-76"><a href="#cb11-76" aria-hidden="true" tabindex="-1"></a>                 <span class="at">studlab =</span> <span class="fu">paste</span>(author, year))</span>
+<span id="cb11-77"><a href="#cb11-77" aria-hidden="true" tabindex="-1"></a>    plot_height <span class="ot">&lt;-</span> <span class="dv">10</span></span>
+<span id="cb11-78"><a href="#cb11-78" aria-hidden="true" tabindex="-1"></a>    plot_width <span class="ot">&lt;-</span> <span class="dv">15</span></span>
+<span id="cb11-79"><a href="#cb11-79" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb11-80"><a href="#cb11-80" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-81"><a href="#cb11-81" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (dataset <span class="sc">==</span> <span class="st">"woodyplants"</span>){</span>
+<span id="cb11-82"><a href="#cb11-82" aria-hidden="true" tabindex="-1"></a>    <span class="fu">data</span>(woodyplants)</span>
+<span id="cb11-83"><a href="#cb11-83" aria-hidden="true" tabindex="-1"></a>    m <span class="ot">&lt;-</span> <span class="fu">metacont</span>(n.elev, mean.elev, sd.elev, n.amb, mean.amb, sd.amb,</span>
+<span id="cb11-84"><a href="#cb11-84" aria-hidden="true" tabindex="-1"></a>                  <span class="at">data =</span> woodyplants, <span class="at">sm =</span> <span class="st">"ROM"</span>)</span>
+<span id="cb11-85"><a href="#cb11-85" aria-hidden="true" tabindex="-1"></a>    plot_height <span class="ot">&lt;-</span> <span class="dv">30</span></span>
+<span id="cb11-86"><a href="#cb11-86" aria-hidden="true" tabindex="-1"></a>    plot_width <span class="ot">&lt;-</span> <span class="dv">15</span></span>
+<span id="cb11-87"><a href="#cb11-87" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb11-88"><a href="#cb11-88" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-89"><a href="#cb11-89" aria-hidden="true" tabindex="-1"></a>  svglite<span class="sc">::</span><span class="fu">xmlSVG</span>({</span>
+<span id="cb11-90"><a href="#cb11-90" aria-hidden="true" tabindex="-1"></a>    meta<span class="sc">::</span><span class="fu">forest</span>(m)</span>
+<span id="cb11-91"><a href="#cb11-91" aria-hidden="true" tabindex="-1"></a>  },</span>
+<span id="cb11-92"><a href="#cb11-92" aria-hidden="true" tabindex="-1"></a>  <span class="at">standalone =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb11-93"><a href="#cb11-93" aria-hidden="true" tabindex="-1"></a>  <span class="at">height =</span> plot_height,</span>
+<span id="cb11-94"><a href="#cb11-94" aria-hidden="true" tabindex="-1"></a>  <span class="at">width =</span> plot_width,</span>
+<span id="cb11-95"><a href="#cb11-95" aria-hidden="true" tabindex="-1"></a>  <span class="at">web_fonts =</span> <span class="fu">list</span>(<span class="st">"https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&amp;display=swap"</span>)</span>
+<span id="cb11-96"><a href="#cb11-96" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span> <span class="fu">crop_svg</span>()</span>
+<span id="cb11-97"><a href="#cb11-97" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-98"><a href="#cb11-98" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb11-99"><a href="#cb11-99" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-100"><a href="#cb11-100" aria-hidden="true" tabindex="-1"></a>write_svg_plot <span class="ot">&lt;-</span> <span class="cf">function</span>(file, type, svg) {</span>
+<span id="cb11-101"><a href="#cb11-101" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"pdf"</span>) {</span>
+<span id="cb11-102"><a href="#cb11-102" aria-hidden="true" tabindex="-1"></a>    rsvg<span class="sc">::</span><span class="fu">rsvg_pdf</span>(<span class="fu">charToRaw</span>(svg<span class="sc">$</span>svg), file, svg<span class="sc">$</span>width, svg<span class="sc">$</span>height)</span>
+<span id="cb11-103"><a href="#cb11-103" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb11-104"><a href="#cb11-104" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"png"</span>) {</span>
+<span id="cb11-105"><a href="#cb11-105" aria-hidden="true" tabindex="-1"></a>    rsvg<span class="sc">::</span><span class="fu">rsvg_png</span>(<span class="fu">charToRaw</span>(svg<span class="sc">$</span>svg), file, svg<span class="sc">$</span>width <span class="sc">*</span> <span class="dv">3</span>, svg<span class="sc">$</span>height <span class="sc">*</span> <span class="dv">3</span>)</span>
+<span id="cb11-106"><a href="#cb11-106" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb11-107"><a href="#cb11-107" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"svg"</span>) {</span>
+<span id="cb11-108"><a href="#cb11-108" aria-hidden="true" tabindex="-1"></a>    <span class="fu">writeLines</span>(svg<span class="sc">$</span>svg, file)</span>
+<span id="cb11-109"><a href="#cb11-109" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb11-110"><a href="#cb11-110" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb11-111"><a href="#cb11-111" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-112"><a href="#cb11-112" aria-hidden="true" tabindex="-1"></a>ui <span class="ot">&lt;-</span> <span class="fu">page_sidebar</span>(</span>
+<span id="cb11-113"><a href="#cb11-113" aria-hidden="true" tabindex="-1"></a>  shinyjs<span class="sc">::</span><span class="fu">useShinyjs</span>(),</span>
+<span id="cb11-114"><a href="#cb11-114" aria-hidden="true" tabindex="-1"></a>  <span class="at">theme =</span> <span class="fu">bs_theme</span>(<span class="at">version =</span> <span class="dv">5</span>, <span class="st">"darkly"</span>),</span>
+<span id="cb11-115"><a href="#cb11-115" aria-hidden="true" tabindex="-1"></a>  tags<span class="sc">$</span><span class="fu">head</span>(tags<span class="sc">$</span><span class="fu">style</span>(<span class="st">"</span></span>
+<span id="cb11-116"><a href="#cb11-116" aria-hidden="true" tabindex="-1"></a><span class="st">    .svg_container {</span></span>
+<span id="cb11-117"><a href="#cb11-117" aria-hidden="true" tabindex="-1"></a><span class="st">      width: 100%;</span></span>
+<span id="cb11-118"><a href="#cb11-118" aria-hidden="true" tabindex="-1"></a><span class="st">      height: auto;</span></span>
+<span id="cb11-119"><a href="#cb11-119" aria-hidden="true" tabindex="-1"></a><span class="st">      display: block;</span></span>
+<span id="cb11-120"><a href="#cb11-120" aria-hidden="true" tabindex="-1"></a><span class="st">      overflow: hidden;</span></span>
+<span id="cb11-121"><a href="#cb11-121" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb11-122"><a href="#cb11-122" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-123"><a href="#cb11-123" aria-hidden="true" tabindex="-1"></a><span class="st">    .svg_container svg {</span></span>
+<span id="cb11-124"><a href="#cb11-124" aria-hidden="true" tabindex="-1"></a><span class="st">      width: 100%;</span></span>
+<span id="cb11-125"><a href="#cb11-125" aria-hidden="true" tabindex="-1"></a><span class="st">      height: auto;</span></span>
+<span id="cb11-126"><a href="#cb11-126" aria-hidden="true" tabindex="-1"></a><span class="st">      display: block;</span></span>
+<span id="cb11-127"><a href="#cb11-127" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb11-128"><a href="#cb11-128" aria-hidden="true" tabindex="-1"></a><span class="st">                    "</span>)),</span>
+<span id="cb11-129"><a href="#cb11-129" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-130"><a href="#cb11-130" aria-hidden="true" tabindex="-1"></a>  <span class="at">sidebar =</span> <span class="fu">sidebar</span>(</span>
+<span id="cb11-131"><a href="#cb11-131" aria-hidden="true" tabindex="-1"></a>    <span class="fu">selectInput</span>(<span class="st">"dataset"</span>, <span class="st">"Dataset"</span>, <span class="at">choices =</span>  <span class="fu">c</span>(<span class="st">"Olkin1995"</span>, <span class="st">"woodyplants"</span>)),</span>
+<span id="cb11-132"><a href="#cb11-132" aria-hidden="true" tabindex="-1"></a>    <span class="fu">sliderInput</span>(<span class="st">"width"</span>, <span class="st">"Plot width (pixels)"</span>, <span class="at">min =</span> <span class="dv">100</span>, <span class="at">max =</span> <span class="dv">1000</span>, <span class="at">value =</span> <span class="dv">500</span>),</span>
+<span id="cb11-133"><a href="#cb11-133" aria-hidden="true" tabindex="-1"></a>    <span class="fu">selectInput</span>(<span class="st">"format"</span>, <span class="st">"Download format"</span>, <span class="at">choices =</span> <span class="fu">c</span>(<span class="st">"svg"</span>, <span class="st">"pdf"</span>, <span class="st">"png"</span>)),</span>
+<span id="cb11-134"><a href="#cb11-134" aria-hidden="true" tabindex="-1"></a>    <span class="fu">downloadButton</span>(<span class="st">"download"</span>, <span class="st">"Download"</span>)</span>
+<span id="cb11-135"><a href="#cb11-135" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb11-136"><a href="#cb11-136" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-137"><a href="#cb11-137" aria-hidden="true" tabindex="-1"></a>  <span class="fu">div</span>(<span class="at">id =</span> <span class="st">"plot_container"</span>,</span>
+<span id="cb11-138"><a href="#cb11-138" aria-hidden="true" tabindex="-1"></a>      <span class="fu">uiOutput</span>(<span class="st">"plot"</span>)</span>
+<span id="cb11-139"><a href="#cb11-139" aria-hidden="true" tabindex="-1"></a>      )</span>
+<span id="cb11-140"><a href="#cb11-140" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb11-141"><a href="#cb11-141" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-142"><a href="#cb11-142" aria-hidden="true" tabindex="-1"></a>server <span class="ot">&lt;-</span> <span class="cf">function</span>(input, output) {</span>
+<span id="cb11-143"><a href="#cb11-143" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-144"><a href="#cb11-144" aria-hidden="true" tabindex="-1"></a>  svg <span class="ot">&lt;-</span> <span class="fu">reactive</span>(<span class="fu">plotting_function</span>(input<span class="sc">$</span>dataset))</span>
+<span id="cb11-145"><a href="#cb11-145" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-146"><a href="#cb11-146" aria-hidden="true" tabindex="-1"></a>  output<span class="sc">$</span>plot <span class="ot">&lt;-</span> <span class="fu">renderUI</span>({</span>
+<span id="cb11-147"><a href="#cb11-147" aria-hidden="true" tabindex="-1"></a>    <span class="fu">div</span>(<span class="at">class =</span> <span class="st">"svg_container"</span>,</span>
+<span id="cb11-148"><a href="#cb11-148" aria-hidden="true" tabindex="-1"></a>        <span class="fu">HTML</span>(<span class="fu">svg</span>()<span class="sc">$</span>svg))</span>
+<span id="cb11-149"><a href="#cb11-149" aria-hidden="true" tabindex="-1"></a>  })</span>
+<span id="cb11-150"><a href="#cb11-150" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-151"><a href="#cb11-151" aria-hidden="true" tabindex="-1"></a>  <span class="fu">observe</span>({</span>
+<span id="cb11-152"><a href="#cb11-152" aria-hidden="true" tabindex="-1"></a>    <span class="fu">runjs</span>(<span class="fu">sprintf</span>(<span class="st">"</span></span>
+<span id="cb11-153"><a href="#cb11-153" aria-hidden="true" tabindex="-1"></a><span class="st">      $('#plot_container').css({</span></span>
+<span id="cb11-154"><a href="#cb11-154" aria-hidden="true" tabindex="-1"></a><span class="st">        'width': '%spx'</span></span>
+<span id="cb11-155"><a href="#cb11-155" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
+<span id="cb11-156"><a href="#cb11-156" aria-hidden="true" tabindex="-1"></a><span class="st">    "</span>, input<span class="sc">$</span>width))</span>
+<span id="cb11-157"><a href="#cb11-157" aria-hidden="true" tabindex="-1"></a>  })</span>
+<span id="cb11-158"><a href="#cb11-158" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-159"><a href="#cb11-159" aria-hidden="true" tabindex="-1"></a>  output<span class="sc">$</span>download <span class="ot">&lt;-</span> <span class="fu">downloadHandler</span>(</span>
+<span id="cb11-160"><a href="#cb11-160" aria-hidden="true" tabindex="-1"></a>    <span class="at">filename =</span> <span class="cf">function</span>() {</span>
+<span id="cb11-161"><a href="#cb11-161" aria-hidden="true" tabindex="-1"></a>      <span class="fu">paste</span>(<span class="st">"plot."</span>, input<span class="sc">$</span>format, <span class="at">sep=</span><span class="st">""</span>)</span>
+<span id="cb11-162"><a href="#cb11-162" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb11-163"><a href="#cb11-163" aria-hidden="true" tabindex="-1"></a>    <span class="at">content =</span> <span class="cf">function</span>(file) {</span>
+<span id="cb11-164"><a href="#cb11-164" aria-hidden="true" tabindex="-1"></a>      <span class="fu">write_svg_plot</span>(file, input<span class="sc">$</span>format, <span class="fu">svg</span>()<span class="sc">$</span>svg, <span class="fu">svg</span>()<span class="sc">$</span>height, <span class="fu">svg</span>()<span class="sc">$</span>width)</span>
+<span id="cb11-165"><a href="#cb11-165" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb11-166"><a href="#cb11-166" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb11-167"><a href="#cb11-167" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-168"><a href="#cb11-168" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb11-169"><a href="#cb11-169" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-170"><a href="#cb11-170" aria-hidden="true" tabindex="-1"></a><span class="fu">shinyApp</span>(<span class="at">ui =</span> ui, <span class="at">server =</span> server)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
 <iframe data-external="1" src="https://019985f8-8345-84ad-d084-8114e92ba959.share.connect.posit.cloud" width="100%" height="1000px"></iframe>
 <p>You can also see it in action in <a href="https://crsu.shinyapps.io/MetaInsight_Scholar/">the dev version</a> of the app.</p>
 </section>
