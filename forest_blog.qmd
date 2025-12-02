@@ -1,11 +1,12 @@
 ---
-title: "Scaling complex base plots in Shiny"
+title: "Seeing the forest for the lines - Scaling complex base plots in Shiny"
 format: 
   html:
     code-fold: true
     code-summary: "View code chunk"
     page-layout: full
     embed-resources: false
+    theme: [default, styles.scss]
 filters:
   - shinylive
 ---
@@ -116,6 +117,101 @@ server <- function(input, output) {
 shinyApp(ui = ui, server = server)
 ```
 
+
+## An explanation
+
+The reason for the plots being cut off when the width is too narrow is because all of the annotations are in the plot margin and the margin units are set in inches which cannot be changed from being 0.2 inches. By default in shiny, plots are displayed at 72 dpi (dots per inch / pixels per inch) and so each margin line is always rendered as 14.4 pixels, imposing a minimum width on the plot. If the space available for the plot is insufficient, then there is no space left for the plot area (i.e. not the margin) and an error occurs (either `figure margins too large` or `invalid graphics state`, depending on whether the previous change was due to the margin changing or the plot size changing respectively). Using this example with 10 margin units on each side of the plot, these take up 288 pixels and the plot area takes up the remaining space.
+
+```{r eval = FALSE, echo = TRUE}
+library(shiny)
+library(bslib)
+
+ui <- page_sidebar(
+  theme = bs_theme(version = 5, "darkly"),
+
+  sidebar = sidebar(
+    sliderInput("size", "Width and height (pixels)", min = 100, max = 1000, value = 288),
+    sliderInput("margin", "Margin (lines)", min = 1, max = 20, value = 10),
+  ),
+    uiOutput("details"),
+    plotOutput("plot") 
+)
+
+server <- function(input, output, session){
+
+  output$details <- renderUI({
+    line_height <- 0.2
+    dpi <- 72
+    margin_width <- line_height * dpi * input$margin * 2
+    plot_width <- input$size - margin_width
+    
+    tagList(
+      p("Margin width: ", margin_width, " pixels"),
+      p("Plot area width: ", plot_width, " pixels")
+    )
+    
+  })
+  
+  output$plot <- renderPlot({
+    par(mar = rep(input$margin, 4))
+    plot(1, 1, xlab = "", ylab = "", xaxt = "n", yaxt = "n")
+    for (side in 1:4) mtext(1:input$margin, side, 0:(input$margin - 1))
+  }, 
+    width = \() input$size, 
+    height = \() input$size
+  )
+  
+}
+
+shinyApp(ui, server)
+```
+```{shinylive-r}
+#| standalone: true
+#| viewerHeight: 1000
+library(shiny)
+library(bslib)
+
+ui <- page_sidebar(
+  theme = bs_theme(version = 5, "darkly"),
+
+  sidebar = sidebar(
+    sliderInput("size", "Width and height (pixels)", min = 100, max = 1000, value = 288),
+    sliderInput("margin", "Margin (lines)", min = 1, max = 20, value = 10),
+  ),
+    uiOutput("details"),
+    plotOutput("plot") 
+)
+
+server <- function(input, output, session){
+
+  output$details <- renderUI({
+    line_height <- 0.2
+    dpi <- 72
+    margin_width <- line_height * dpi * input$margin * 2
+    plot_width <- input$size - margin_width
+    
+    tagList(
+      p("Margin width: ", margin_width, " pixels"),
+      p("Plot area width: ", plot_width, " pixels")
+    )
+    
+  })
+  
+  output$plot <- renderPlot({
+    par(mar = rep(input$margin, 4))
+    plot(1, 1, xlab = "", ylab = "", xaxt = "n", yaxt = "n")
+    for (side in 1:4) mtext(1:input$margin, side, 0:(input$margin - 1))
+  }, 
+    width = \() input$size, 
+    height = \() input$size
+  )
+  
+}
+
+shinyApp(ui, server)
+```
+
+
 ## SVG to the rescue
 
 In one part of the existing app, this was already causing a problem where three plots were being displayed side-by-side and even on a wide screen, the plot did not fit inside the column. As a workaround, the plot was being rendered to a png file and then read back in to display. This fixed the problem of the edges being cut off, but there was white space around the plot which made it especially small. This workaround got me thinking though and I thought it would be much better if instead of rendering the plot to a png, it was rendered to an svg (scalable vector graphic), which, if inside an appropriate container can always be scaled to fit inside. SVGs are a great format and use code to produce graphics in an analagous way to how html can be used to produce text.
@@ -149,7 +245,7 @@ We also need to calculate sensible values for width and height, but at least now
 
 ### Cropping
 
-This largely solved the problem in the app, but I'm also producing an html report and some of the plots had a lot of whitespace below them leading to gaps between the outputs in the report. I knew that I could crop SVGs by adjusting their `viewBox` parameter, which acts like a window into the canvas, but figuring out where the content would be from the code was difficult, if not impossible. Seemingly, the only way to do this is to render the svg to pixels, for example via `paste(svg, collapse = "\n") |> magick::image_read_svg() |> magick::image_data()`, and then search for the outermost pixels that aren't white. I was worried this would be slow, but it ended up only taking ~0.1 seconds which seems reasonable enough.
+This largely solved the problem in the app, but I'm also producing an html report and some of the plots had a lot of whitespace below them leading to gaps between the outputs in the report. I knew that I could crop svgs by adjusting their `viewBox` parameter, which acts like a window into the canvas, but figuring out where the content would be from the code was difficult, if not impossible. Seemingly, the only way to do this is to render the svg to a raster, for example via `paste(svg, collapse = "\n") |> magick::image_read_svg() |> magick::image_data()`, and then search for the outermost pixels that aren't white. I was worried this would be slow, but it ended up only taking ~0.1 seconds which seems reasonable enough.
 
 The values for the `viewBox` are a little odd, as you specify the starting x and y coordinates followed by the width and height. I also wanted to add a margin around the content, so needed to add or substract that from the outermost pixel coordinates.
 
@@ -240,7 +336,7 @@ The next step was to make a container div to put the plots in to, enabling the p
 
 ## Side effects
 
-There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, whilst we still need to provide a width and height to `svglite::xmlSVG()` we only need to worry that the plot will fit inside those dimensions as `crop_svg()` tidies everything up. Thirdly, the svg can be rendered to other file formats (pdf and png) and produce *exactly* the same plot as the user sees on the screen. Whilst the rendering from `pdf()` `png()` and `svg()` is pretty similar, there are small differences in text rendering which to a pedant like myself was annoying. Unlike before, we can also call the plotting function once in a `reactive()` and then use the output to generate the plot and the download, rather than calling the function again. If users download the .svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.
+There are a number of side effects caused by this, first the plot generation can be moved entirely to a function, moving code away from the server function and making it easier to write tests for. Second, whilst we still need to provide a width and height to `svglite::xmlSVG()` we only need to worry that the plot will fit inside those dimensions as `crop_svg()` tidies everything up. Thirdly, the svg can be rendered to other file formats (pdf and png) and produce *exactly* the same plot as the user sees on the screen. Whilst the rendering from `pdf()` `png()` and `svg()` is pretty similar, there are small differences in text rendering which to a pedant like myself was annoying. Unlike before, we can also call the plotting function once in a `reactive()` and then use the output to generate the plot and the download, rather than calling the function again. If users download the svg then they are also much easier to edit if they need to than as pngs or pdfs, which are the main options in the existing version.
 
 The downsides compared to before are that the plots aren't easily edited inside R and to be displayed in Rstudio, they need wrapping in `htmltools::HTML()`. Both of these would relatively easy to resolve though by adding a parameter to determine what type of output the functions produce - either the svg code, the svg wrapped in `htmltools::HTML()` or writing to the graphics device.
 
@@ -317,7 +413,7 @@ crop_svg <- function(svg, margin = 10){
     height = bbox$height)
 }
 
-plotting_function <- function(dataset){
+plotting_function <- function(dataset, width){
 
   if (dataset == "Olkin1995"){
     data(Olkin1995)
@@ -412,7 +508,7 @@ server <- function(input, output) {
       paste("plot.", input$format, sep="")
     },
     content = function(file) {
-      write_svg_plot(file, input$format, svg()$svg, svg()$height, svg()$width)
+      write_svg_plot(file, input$format, svg())
     }
   )
 
@@ -420,10 +516,11 @@ server <- function(input, output) {
 
 shinyApp(ui = ui, server = server)
 
+
 ```
 
 ```{=html}
 <iframe data-external="1" src="https://019985f8-8345-84ad-d084-8114e92ba959.share.connect.posit.cloud" width = "100%" height = "1000px"></iframe>
 ```
 
-You can also see it in action in [the dev version](https://crsu.shinyapps.io/MetaInsight_Scholar/) of the app.
+You can also see it in action in [the beta version](https://crsu.shinyapps.io/MetaInsight_Scholar/) of the updated app.

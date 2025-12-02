@@ -161,7 +161,7 @@ server <- function(input, output) {
       paste("plot.", input$format, sep="")
     },
     content = function(file) {
-      write_svg_plot(file, input$format, svg()$svg, svg()$height, svg()$width)
+      write_svg_plot(file, input$format, svg())
     }
   )
 
